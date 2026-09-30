@@ -540,6 +540,7 @@ export function renderBoard() {
 
 function emptyState() {
   return h('div', { class: 'empty-state' },
+    h('img', { class: 'empty-logo', src: 'img/logo.svg', alt: '', width: 72, height: 72 }),
     h('h2', null, 'Gestisci gli addon di tutti i tuoi account'),
     h('p', null, 'Aggiungi uno o più account Stremio e Nuvio, poi trascina gli addon da una lista all\'altra per copiarli, riordinali e salva quando sei pronto.'),
     h('button', { type: 'button', class: 'btn primary large', onClick: () => openLogin() }, icon('plus', 16), ' Aggiungi il primo account'),

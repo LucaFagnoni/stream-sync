@@ -11,13 +11,13 @@
        connect-src è aperto a https/http perché i manifest degli addon stanno su host arbitrari.
        frame-ancestors non è supportato nel <meta>: l'anti-clickjacking è in js/main.js. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https: http: data:; connect-src https: http:; base-uri 'none'; form-action 'none'; object-src 'none'; require-trusted-types-for 'script'; trusted-types streamsync-icons">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238b5cf6'/%3E%3Cpath d='M9 12h14M9 20h14M19 8l4 4-4 4M13 16l-4 4 4 4' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="icon" type="image/svg+xml" href="img/logo.svg">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
   <a class="skip" href="#board">Vai alle liste</a>
   <header class="topbar">
-    <div class="brand"><span class="logo-mark" aria-hidden="true"></span><strong>StreamSync</strong></div>
+    <div class="brand"><img class="logo-mark" src="img/logo.svg" alt="" width="26" height="26"><strong>StreamSync</strong></div>
     <div class="search">
       <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
       <input id="search" type="search" placeholder="Cerca in tutte le liste  ( / )" aria-label="Cerca addon" autocomplete="off" spellcheck="false">

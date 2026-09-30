@@ -56,6 +56,12 @@ Non serve build né dipendenze: la cartella si può pubblicare così com'è su q
 
 ## Pubblicazione
 
+**Cloudflare Pages (consigliato: origin dedicato + intestazioni HTTP di sicurezza).** Collegamento Git con:
+build command `npm run build`, output `_site`, variabile `NODE_VERSION=22`. La build esegue gli unit test
+e pubblica solo `index.html`, `css/`, `js/`, `img/` e `_headers` (CSP con `frame-ancestors`, `X-Frame-Options`, `nosniff`, HSTS).
+
+**GitHub Pages.**
+
 `.github/workflows/pages.yml` esegue unit test ed end-to-end e, se passano, pubblica su GitHub Pages **solo** `index.html`, `css/` e `js/`. Serve una configurazione una tantum: *Settings → Pages → Build and deployment → Source: **GitHub Actions***. Le action sono fissate per SHA e aggiornate da Dependabot.
 
 ## Test

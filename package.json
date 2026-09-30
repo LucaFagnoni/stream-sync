@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node scripts/serve.mjs",
     "test": "node --test tests/unit.test.mjs",
-    "test:e2e": "node tests/e2e.mjs"
+    "test:e2e": "node tests/e2e.mjs",
+    "build": "npm test && rm -rf _site && mkdir _site && cp -r index.html css js img _headers _site/"
   },
   "license": "MIT"
 }
