@@ -1,5 +1,6 @@
-# Pubblica StreamSync su GitHub Pages, solo dopo che unit test ed end-to-end sono passati.
-# Requisito una tantum: Settings → Pages → Build and deployment → Source: "GitHub Actions".
+# CI: unit test ed end-to-end a ogni push. L'app è pubblicata da Cloudflare Pages (https://addonmanager.pages.dev);
+# su GitHub Pages resta solo una pagina di reindirizzamento che cancella i dati rimasti sul vecchio origin
+# condiviso (lucafagnoni.github.io). Requisito: Settings → Pages → Source: "GitHub Actions".
 # Le action sono fissate per SHA (aggiornate da Dependabot): un tag spostato non può iniettare codice nel deploy.
 name: Pages
 
@@ -49,10 +50,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Prepara il sito (solo i file dell'app, niente test o script)
+      - name: Prepara la pagina di reindirizzamento
         run: |
           mkdir -p _site
-          cp -r index.html css js img _site/
+          cp redirect/index.html redirect/404.html redirect/redirect.js _site/
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

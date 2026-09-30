@@ -6,7 +6,7 @@ Nessun backend: il browser parla direttamente con `api.strem.io` e `api.nuvio.tv
 
 ## Avvio
 
-Online: **https://lucafagnoni.github.io/stream-sync/** (vedi sotto le avvertenze sull'origin condiviso).
+Online: **https://addonmanager.pages.dev/** (Cloudflare Pages: origin dedicato e intestazioni HTTP di sicurezza).
 
 In locale:
 
@@ -31,7 +31,7 @@ Non serve build né dipendenze: la cartella si può pubblicare così com'è su q
 - **Le password non vengono mai salvate.** Solo i token di sessione:
   - «Ricordami» **spento (default)** → token in `sessionStorage`: vale finché la scheda resta aperta;
   - «Ricordami» acceso → token in `localStorage`: resta anche dopo la chiusura del browser.
-- ⚠️ **Origin condiviso su GitHub Pages.** `lucafagnoni.github.io/stream-sync/` ha lo stesso origin di `lucafagnoni.github.io` e di ogni altro tuo progetto Pages: tutte quelle pagine possono leggere lo stesso `localStorage` (e il `sessionStorage`, se aperte nella stessa scheda), quindi anche i token. Oggi su quell'origin c'è un sito con jQuery 3.3.1 e nessuna CSP. Per usare «Ricordami» in modo sicuro pubblica l'app su un **origin dedicato** (dominio personalizzato, oppure un account/organizzazione GitHub usato solo per questa app).
+- ⚠️ **Origin condiviso su GitHub Pages** (motivo per cui l'app ora è su Cloudflare). `lucafagnoni.github.io/stream-sync/` ha lo stesso origin di `lucafagnoni.github.io` e di ogni altro tuo progetto Pages: tutte quelle pagine possono leggere lo stesso `localStorage` (e il `sessionStorage`, se aperte nella stessa scheda), quindi anche i token. Oggi su quell'origin c'è un sito con jQuery 3.3.1 e nessuna CSP. Per usare «Ricordami» in modo sicuro pubblica l'app su un **origin dedicato** (dominio personalizzato, oppure un account/organizzazione GitHub usato solo per questa app).
 - Un token Stremio (`authKey`) non scade da solo: se temi che sia stato esposto usa **Backup → «Esci da tutto e cancella i dati locali»**, che lo invalida sul server.
 - **Content-Security-Policy** restrittiva (script solo dalla stessa origine, nessun plugin) con **Trusted Types**: nessun `innerHTML` con dati esterni. Nomi, descrizioni e loghi degli addon sono trattati come non fidati, anche se malformati.
 - **Anti-clickjacking**: dentro un iframe di un altro sito la pagina non carica account né chiama le API (GitHub Pages non permette l'header `frame-ancestors`).
@@ -60,9 +60,7 @@ Non serve build né dipendenze: la cartella si può pubblicare così com'è su q
 build command `npm run build`, output `_site`, variabile `NODE_VERSION=22`. La build esegue gli unit test
 e pubblica solo `index.html`, `css/`, `js/`, `img/` e `_headers` (CSP con `frame-ancestors`, `X-Frame-Options`, `nosniff`, HSTS).
 
-**GitHub Pages.**
-
-`.github/workflows/pages.yml` esegue unit test ed end-to-end e, se passano, pubblica su GitHub Pages **solo** `index.html`, `css/` e `js/`. Serve una configurazione una tantum: *Settings → Pages → Build and deployment → Source: **GitHub Actions***. Le action sono fissate per SHA e aggiornate da Dependabot.
+**GitHub Pages (solo reindirizzamento).** `.github/workflows/pages.yml` esegue unit test ed end-to-end a ogni push e pubblica su `lucafagnoni.github.io/stream-sync/` soltanto `redirect/`: una pagina che cancella i dati StreamSync rimasti su quel vecchio origin condiviso e rimanda al nuovo indirizzo. Le action sono fissate per SHA e aggiornate da Dependabot.
 
 ## Test
 
