@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StreamSync — addon Nuvio e Stremio</title>
+  <meta name="description" content="Gestisci, riordina, aggiorna e copia gli addon di più account Nuvio e Stremio da un'unica pagina.">
+  <meta name="referrer" content="no-referrer">
+  <!-- Le credenziali restano nel browser: la CSP limita script e form alla sola origine locale.
+       connect-src è aperto a https/http perché i manifest degli addon stanno su host arbitrari. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src https: http: data:; connect-src https: http:; base-uri 'none'; form-action 'none'">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238b5cf6'/%3E%3Cpath d='M9 12h14M9 20h14M19 8l4 4-4 4M13 16l-4 4 4 4' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <a class="skip" href="#board">Vai alle liste</a>
+  <header class="topbar">
+    <div class="brand"><span class="logo-mark" aria-hidden="true"></span><strong>StreamSync</strong></div>
+    <div class="search">
+      <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="search" type="search" placeholder="Cerca in tutte le liste  ( / )" aria-label="Cerca addon" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="top-actions">
+      <button id="save-all" type="button" class="btn primary" disabled></button>
+      <button id="backup" type="button" class="btn">Backup</button>
+      <button id="theme" type="button" class="icon-btn" aria-label="Cambia tema" title="Cambia tema"></button>
+      <button id="add-account" type="button" class="btn">+ Account</button>
+    </div>
+  </header>
+  <nav id="accounts" class="accounts" aria-label="Account collegati"></nav>
+  <main id="board" class="board" tabindex="-1"><noscript>Questa pagina richiede JavaScript.</noscript></main>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
