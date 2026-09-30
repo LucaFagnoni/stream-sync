@@ -115,6 +115,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .warn-text { color: var(--warn); }
 
+/* ---- pagina incorniciata (anti-clickjacking) ---- */
+.framed { margin: auto; padding: 24px; text-align: center; }
+
 /* ---- stato vuoto ---- */
 .empty-state { max-width: 560px; text-align: center; padding: 24px; }
 .empty-state h2 { font-size: 24px; margin: 0 0 8px; } .empty-state p { color: var(--muted); margin: 0 0 18px; }

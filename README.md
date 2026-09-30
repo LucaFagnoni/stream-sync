@@ -6,11 +6,15 @@ Nessun backend: il browser parla direttamente con `api.strem.io` e `api.nuvio.tv
 
 ## Avvio
 
+Online: **https://lucafagnoni.github.io/stream-sync/** (vedi sotto le avvertenze sull'origin condiviso).
+
+In locale:
+
 ```bash
-npm start            # http://localhost:8080
+npm start            # http://localhost:8080 (solo loopback)
 ```
 
-Oppure pubblica la cartella così com'è su qualsiasi hosting statico (GitHub Pages, Netlify, …). Non serve build né dipendenze.
+Non serve build né dipendenze: la cartella si può pubblicare così com'è su qualsiasi hosting statico.
 
 ## Funzioni
 
@@ -24,11 +28,23 @@ Oppure pubblica la cartella così com'è su qualsiasi hosting statico (GitHub Pa
 
 ## Sicurezza e integrità dei dati
 
-- **Le password non vengono mai salvate.** Solo i token di sessione, e solo con «Ricordami», nel `localStorage` di questo browser. Su un computer condiviso lascia «Ricordami» spento.
-- La pagina ha una **Content-Security-Policy** restrittiva (script solo dalla stessa origine) e non usa `innerHTML` con dati esterni: nomi, descrizioni e loghi degli addon sono trattati come non fidati.
-- **Attenzione agli URL degli addon**: spesso contengono chiavi personali (es. debrid). Backup, export e «Copia tutti gli URL» le includono.
-- Il salvataggio **sostituisce l'intera lista** (è così che funzionano `addonCollectionSet` e `sync_push_addons`). Per questo: conferma quando rimuovi addon, controllo di conflitto se la lista è cambiata altrove nel frattempo, backup automatico dello stato remoto (ultimi 25) e rilettura dopo la scrittura.
-- La rimozione di un account Nuvio usa `logout?scope=local`: non disconnette le altre app.
+- **Le password non vengono mai salvate.** Solo i token di sessione:
+  - «Ricordami» **spento (default)** → token in `sessionStorage`: vale finché la scheda resta aperta;
+  - «Ricordami» acceso → token in `localStorage`: resta anche dopo la chiusura del browser.
+- ⚠️ **Origin condiviso su GitHub Pages.** `lucafagnoni.github.io/stream-sync/` ha lo stesso origin di `lucafagnoni.github.io` e di ogni altro tuo progetto Pages: tutte quelle pagine possono leggere lo stesso `localStorage` (e il `sessionStorage`, se aperte nella stessa scheda), quindi anche i token. Oggi su quell'origin c'è un sito con jQuery 3.3.1 e nessuna CSP. Per usare «Ricordami» in modo sicuro pubblica l'app su un **origin dedicato** (dominio personalizzato, oppure un account/organizzazione GitHub usato solo per questa app).
+- Un token Stremio (`authKey`) non scade da solo: se temi che sia stato esposto usa **Backup → «Esci da tutto e cancella i dati locali»**, che lo invalida sul server.
+- **Content-Security-Policy** restrittiva (script solo dalla stessa origine, nessun plugin) con **Trusted Types**: nessun `innerHTML` con dati esterni. Nomi, descrizioni e loghi degli addon sono trattati come non fidati, anche se malformati.
+- **Anti-clickjacking**: dentro un iframe di un altro sito la pagina non carica account né chiama le API (GitHub Pages non permette l'header `frame-ancestors`).
+- **Attenzione agli URL degli addon**: spesso contengono chiavi personali (es. `realdebrid=…`). Backup, export e «Copia tutti gli URL» le includono. Gli URL non vengono mai ricodificati: si salvano esattamente come li hai incollati.
+- Il salvataggio **sostituisce l'intera lista** (così funzionano `addonCollectionSet` e `sync_push_addons`), quindi:
+  - conferma esplicita quando rimuovi addon (l'Invio seleziona «Annulla»);
+  - se la lista è cambiata su un altro dispositivo: **Unisci** (predefinito, non perde le modifiche di nessuno), Ricarica o Sovrascrivi;
+  - gli addon che non hai toccato prendono la versione attuale del server (manifest/nomi aggiornati altrove non vengono riportati indietro);
+  - campi del descrittore Stremio che l'app non conosce vengono conservati;
+  - backup automatico dello stato remoto prima di ogni scrittura (ultimi 25, cancellati insieme all'account);
+  - rilettura dopo la scrittura; dopo un timeout si verifica se la scrittura è comunque avvenuta;
+  - «Salva tutto» salva prima le liste che ricevono addon e poi quelle che li perdono.
+- La rimozione di un account Nuvio usa `logout?scope=local`: non disconnette le altre app. Un errore di rete durante il rinnovo del token non fa perdere la sessione; più schede aperte condividono il token ruotato.
 
 ## Limiti noti
 
@@ -38,10 +54,14 @@ Oppure pubblica la cartella così com'è su qualsiasi hosting statico (GitHub Pa
 - Accessi Stremio solo via email/password (non Facebook/Apple). Non si creano account da qui.
 - Su Nuvio il server non conserva il manifest, quindi «aggiorna» si limita al nome.
 
+## Pubblicazione
+
+`.github/workflows/pages.yml` esegue unit test ed end-to-end e, se passano, pubblica su GitHub Pages **solo** `index.html`, `css/` e `js/`. Serve una configurazione una tantum: *Settings → Pages → Build and deployment → Source: **GitHub Actions***. Le action sono fissate per SHA e aggiornate da Dependabot.
+
 ## Test
 
 ```bash
-npm test             # unit: URL, modello bozza/undo, specchio, client API (body esatti, refresh token)
+npm test             # unit: URL, bozza/undo, unione a tre vie, client API (body esatti, refresh token), storage
 npm run test:e2e     # Chromium (Playwright) contro mock di Stremio, Nuvio e degli host addon
 ```
 

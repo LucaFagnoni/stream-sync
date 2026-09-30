@@ -3,11 +3,13 @@
 
 import * as Stremio from './stremio.js';
 import * as Nuvio from './nuvio.js';
-import { Panel, makeItem, remoteSignature, signature, isProtected, planMirror, applyMirror } from './model.js';
+import {
+  Panel, makeItem, remoteSignature, signature, isProtected, planMirror, applyMirror, rebaseOnRemote, mergeThreeWay,
+} from './model.js';
 import { convertItem } from './convert.js';
 import { fetchManifest } from './manifest.js';
-import { loadStore, saveStore, pushBackup } from './store.js';
-import { uid, pLimit, hashString, stableStringify, idOf } from './util.js';
+import { loadStore, saveStore, pushBackup, readSession, deleteBackupsFor, clearAll, STORE_KEY } from './store.js';
+import { uid, pLimit, hashString, stableStringify, idOf, str, toManifestUrl } from './util.js';
 
 export const state = {
   accounts: [],
@@ -48,14 +50,14 @@ export const panelList = () => [...state.panels.values()];
 export const dirtyPanels = () => panelList().filter((p) => p.dirty);
 export const panelLabel = (p) => (p.kind === 'nuvio' ? `${accountOf(p)?.label} · ${p.title}` : p.title);
 
+// Account rimossi in questa scheda: non vanno "resuscitati" dall'unione con lo storage.
+const removedIds = new Set();
+
 function persist() {
-  saveStore({
-    accounts: state.accounts.map((a) => ({
-      id: a.id, kind: a.kind, label: a.label, email: a.email, remember: a.remember,
-      session: a.remember ? a.session : null,
-    })),
-    settings: state.settings,
-  });
+  // Un'altra scheda può aver aggiunto account: si conservano invece di sovrascriverli.
+  const known = new Set(state.accounts.map((a) => a.id));
+  const foreign = loadStore().accounts.filter((a) => !known.has(a.id) && !removedIds.has(a.id));
+  saveStore({ accounts: [...state.accounts, ...foreign], settings: state.settings });
 }
 
 export function updateSettings(patch) {
@@ -69,9 +71,23 @@ export function toggleCollapsed(panelId) {
   persist();
 }
 
+/** Un'altra scheda ha ruotato il token Nuvio: lo si adotta subito, prima di riusare quello vecchio. */
+function onStorage(e) {
+  if (e.key !== STORE_KEY) return;
+  for (const acc of state.accounts) {
+    if (acc.kind !== 'nuvio' || !acc.nuvio) continue;
+    const s = readSession(acc.id);
+    if (s?.refresh_token && s.refresh_token !== acc.nuvio.session?.refresh_token) {
+      acc.session = s;
+      acc.nuvio.session = s;
+    }
+  }
+}
+
 // ---------- accesso remoto (per tipo) ----------
 async function fetchRemote(panel) {
   const acc = accountOf(panel);
+  if (!acc?.session) throw new Error('Account non collegato.');
   if (acc.kind === 'stremio') {
     const { addons } = await Stremio.getAddons(acc.session.authKey);
     const template = addons.find((a) => 'transportName' in a)?.transportName;
@@ -81,12 +97,12 @@ async function fetchRemote(panel) {
   return { items: items.map(makeItem) };
 }
 
-async function pushRemote(panel, template) {
+async function pushRemote(panel, items, template) {
   const acc = accountOf(panel);
   if (acc.kind === 'stremio') {
-    await Stremio.setAddons(acc.session.authKey, panel.items.map((i) => Stremio.toDescriptor(i, template)));
+    await Stremio.setAddons(acc.session.authKey, items.map((i) => Stremio.toDescriptor(i, template)));
   } else {
-    await acc.nuvio.pushAddons(panel.profile, panel.items);
+    await acc.nuvio.pushAddons(panel.profile, items);
   }
 }
 
@@ -136,7 +152,7 @@ export async function connectAccount(acc) {
       notifyBoard();
       await loadPanel(p);
     } else {
-      acc.nuvio = new Nuvio.NuvioSession(acc.session, (s) => { acc.session = s; persist(); });
+      acc.nuvio = new Nuvio.NuvioSession(acc.session, (s) => { acc.session = s; persist(); }, () => readSession(acc.id));
       const profiles = await acc.nuvio.listProfiles();
       const panels = profiles.map((pr) => new Panel({
         id: `${acc.id}:${pr.index}`, accountId: acc.id, kind: 'nuvio', profile: pr.index,
@@ -158,7 +174,7 @@ export async function connectAccount(acc) {
 }
 
 function makeAccount(p) {
-  return { id: p.id || uid(), kind: p.kind, label: p.label, email: p.email, remember: p.remember !== false,
+  return { id: p.id || uid(), kind: p.kind, label: p.label, email: p.email, remember: !!p.remember,
     session: p.session || null, status: 'idle', error: '', panelIds: [], nuvio: null };
 }
 
@@ -166,6 +182,7 @@ export async function init() {
   const s = loadStore();
   state.settings = s.settings;
   state.accounts = s.accounts.map(makeAccount);
+  globalThis.addEventListener?.('storage', onStorage);
   notifyBoard();
   await Promise.all(state.accounts.map(connectAccount));
 }
@@ -193,8 +210,9 @@ export async function addAccount({ kind, email, password, label, remember }) {
   return acc;
 }
 
-export async function reauth(acc, password) {
+export async function reauth(acc, password, remember = acc.remember) {
   acc.session = await authenticate(acc.kind, acc.email, password);
+  acc.remember = !!remember;
   persist();
   await connectAccount(acc);
 }
@@ -216,7 +234,16 @@ export async function removeAccount(acc) {
   }
   dropPanels(acc);
   state.accounts = state.accounts.filter((a) => a !== acc);
+  removedIds.add(acc.id);
+  deleteBackupsFor(acc.id);
   persist();
+  notifyBoard();
+}
+
+/** Esce da tutti gli account (invalidando i token sul server) e cancella ogni dato locale. */
+export async function forgetEverything() {
+  for (const acc of [...state.accounts]) await removeAccount(acc);
+  clearAll();
   notifyBoard();
 }
 
@@ -225,25 +252,39 @@ export async function reloadAccount(acc) { await connectAccount(acc); }
 // ---------- salvataggio ----------
 const backupEntry = (panel, remoteItems) => ({
   ts: Date.now(),
+  accountId: panel.accountId,
   account: accountOf(panel)?.label,
   title: panel.title,
   kind: panel.kind,
   items: remoteItems.map((i) => ({ url: i.url, name: i.name, enabled: i.enabled !== false })),
 });
 
-/** @returns {Promise<boolean>} true se la lista è stata scritta sul server */
+/** @returns {Promise<boolean>} true se sul server c'è ora la bozza */
 export async function savePanel(panel) {
-  if (!panel.dirty || panel.status === 'saving' || panel.readOnly) return false;
+  if (!panel.dirty || panel.status !== 'ready' || panel.readOnly) return false;
   const acc = accountOf(panel);
+  if (!acc?.session) return false;
   const diff = panel.diff;
 
   // Il push sostituisce TUTTO: chiedi conferma quando si cancella qualcosa.
   if ((diff.removed.length || !panel.items.length) && !(await hooks.confirmSave(panel, diff))) return false;
+  if (!panel.dirty || panel.status !== 'ready') return false;
 
+  const same = (a, b) => signature(panel.kind, a) === signature(panel.kind, b);
   panel.status = 'saving';
   notifyPanel(panel);
   try {
     const remote = await fetchRemote(panel);
+
+    // Il server ha già esattamente la bozza (es. un tentativo precedente, scaduto per timeout, era riuscito).
+    if (same(remote.items, panel.items)) {
+      panel.template = remote.template;
+      panel.load(remote.items);
+      hooks.toast(`«${panel.title}» era già aggiornato sul server.`, 'ok');
+      return true;
+    }
+
+    let draft = panel.items;
     if (remoteSignature(remote.items) !== panel.remoteSig) {
       const choice = await hooks.confirmConflict(panel, remote.items);
       if (choice === 'reload') {
@@ -252,15 +293,40 @@ export async function savePanel(panel) {
         hooks.toast('Lista ricaricata dal server: le tue modifiche sono state scartate.', 'info');
         return false;
       }
-      if (choice !== 'overwrite') { panel.status = 'ready'; return false; }
+      if (choice === 'merge') {
+        draft = mergeThreeWay(panel.kind, panel.base, panel.items, remote.items);
+        panel.rebase(remote.items, draft);
+      } else if (choice !== 'overwrite') {
+        panel.status = 'ready';
+        return false;
+      }
     }
+
+    // Gli addon che non abbiamo toccato prendono la versione attuale del server.
+    const toPush = rebaseOnRemote(panel.kind, panel.base, draft, remote.items);
+    if (same(toPush, remote.items)) {
+      panel.template = remote.template;
+      panel.load(remote.items);
+      hooks.toast(`«${panel.title}»: nessuna modifica da scrivere.`, 'info');
+      return true;
+    }
+
     pushBackup(backupEntry(panel, remote.items));
-    await pushRemote(panel, remote.template);
-    // Rilettura: conferma che il server abbia davvero accettato lo stato che vediamo.
+    try {
+      await pushRemote(panel, toPush, remote.template);
+    } catch (e) {
+      if (e.expired) throw e;
+      // Esito incerto (timeout, rete): prima di dichiarare il fallimento si guarda cosa c'è sul server.
+      const now = await fetchRemote(panel).catch(() => null);
+      if (!now || !same(now.items, toPush)) throw e;
+    }
+
+    // Rilettura: conferma che il server abbia davvero accettato ciò che abbiamo inviato.
     const fresh = await fetchRemote(panel);
     panel.template = fresh.template;
     panel.load(fresh.items);
-    hooks.toast(`Salvato: ${panel.title}`, 'ok');
+    if (same(fresh.items, toPush)) hooks.toast(`Salvato: ${panel.title}`, 'ok');
+    else hooks.toast(`«${panel.title}» è stato salvato, ma il server ora mostra una lista diversa da quella inviata: controllala.`, 'error');
     return true;
   } catch (e) {
     panel.status = 'ready';
@@ -273,9 +339,14 @@ export async function savePanel(panel) {
   }
 }
 
+/**
+ * Salva prima le liste che ricevono addon e poi quelle che ne perdono: se uno "sposta" si interrompe
+ * a metà, l'addon resta duplicato invece di sparire da entrambe.
+ */
 export async function saveAll() {
+  const list = dirtyPanels().sort((a, b) => a.diff.removed.length - b.diff.removed.length);
   let ok = 0;
-  for (const p of dirtyPanels()) if (await savePanel(p)) ok++;
+  for (const p of list) if (await savePanel(p)) ok++;
   return ok;
 }
 
@@ -289,12 +360,12 @@ const convertLimit = pLimit(4);
 
 /**
  * Copia (o sposta) item da un pannello a un altro. Gli item già presenti in destinazione vengono saltati;
- * quelli per cui non si riesce a ottenere il manifest (solo verso Stremio) sono riportati come falliti.
+ * quelli che non si possono convertire (es. manifest non scaricabile verso Stremio) sono riportati come falliti.
  */
 export async function copyItems(src, keys, dst, index, { move = false } = {}) {
   const res = { added: 0, skipped: 0, failed: [], removed: 0, blocked: 0 };
   if (dst.readOnly) { hooks.toast(dst.readOnlyReason || 'Pannello in sola lettura.', 'error'); return res; }
-  if (dst.status !== 'ready') { hooks.toast('Il pannello di destinazione non è pronto.', 'error'); return res; }
+  if (dst.status !== 'ready') { hooks.toast('Il pannello di destinazione non è pronto (caricamento o salvataggio in corso).', 'error'); return res; }
 
   const set = new Set(keys);
   const items = src.items.filter((i) => set.has(i.key));
@@ -305,10 +376,14 @@ export async function copyItems(src, keys, dst, index, { move = false } = {}) {
     try { return { item, out: await convertItem(item, dst.kind) }; }
     catch (e) { return { item, error: explain(e) }; }
   })));
-  const ok = converted.filter((c) => c.out);
   res.failed = converted.filter((c) => c.error).map((c) => ({ name: c.item.name, error: c.error }));
 
-  if (ok.length) dst.insert(ok.map((c) => c.out), index);
+  // Durante la conversione (asincrona) la destinazione può essere cambiata.
+  const ok = converted.filter((c) => c.out && !dst.has(c.out.url));
+  if (ok.length && !dst.insert(ok.map((c) => c.out), index)) {
+    hooks.toast('La destinazione è in salvataggio: copia annullata, riprova tra un attimo.', 'error');
+    return { ...res, failed: [] };
+  }
   res.added = ok.length;
 
   if (move) {
@@ -331,9 +406,11 @@ export async function mirrorInto(dst, src, mode) {
     try { converted.set(idOf(item.url), await convertItem(item, dst.kind)); }
     catch (e) { failed.push({ name: item.name, error: explain(e) }); }
   })));
-  dst.commit(applyMirror(dst.items, src.items, converted, mode));
+  const applied = dst.commit(applyMirror(dst.items, src.items, converted, mode));
   notifyPanel(dst);
-  return { added: converted.size, removed: plan.remove.length, failed };
+  return applied
+    ? { added: converted.size, removed: plan.remove.length, failed }
+    : { added: 0, removed: 0, failed, locked: true };
 }
 
 // ---------- verifica / aggiornamento ----------
@@ -362,8 +439,10 @@ export async function checkItems(panel, keys) {
       const m = r.manifest;
       if (panel.kind === 'stremio') {
         const changed = hashString(stableStringify(m)) !== hashString(stableStringify(item.manifest));
-        if (changed) updates.set(item.key, { manifest: m, name: m.name, updatedFrom: { from: item.manifest?.version ?? null, to: m.version ?? null } });
-      } else if (m.name && m.name !== item.name) {
+        if (changed) {
+          updates.set(item.key, { manifest: m, name: m.name, updatedFrom: { from: str(item.manifest?.version) || null, to: str(m.version) || null } });
+        }
+      } else if (m.name !== item.name) {
         updates.set(item.key, { name: m.name, manifest: m });
       } else {
         panel.annotate(item.key, { manifest: m });
@@ -372,17 +451,18 @@ export async function checkItems(panel, keys) {
     notifyPanel(panel);
   })));
 
-  if (updates.size) {
+  const committed = updates.size > 0 &&
     panel.commit(panel.items.map((i) => (updates.has(i.key) ? { ...i, ...updates.get(i.key) } : i)));
-  }
   notifyPanel(panel);
-  return { checked: targets.length, updated: updates.size, failures };
+  return { checked: targets.length, updated: committed ? updates.size : 0, skipped: updates.size > 0 && !committed, failures };
 }
 
 // ---------- installazione da URL ----------
+/** `existing`: Set di idOf() già presenti nella lista. Gli URL vengono normalizzati a …/manifest.json. */
 export async function probeUrls(urls, kind, existing) {
   const limit = pLimit(4);
-  return Promise.all(urls.map((url) => limit(async () => {
+  return Promise.all(urls.map((raw) => limit(async () => {
+    const url = toManifestUrl(raw);
     if (existing.has(idOf(url))) return { url, status: 'duplicate' };
     const r = await fetchManifest(url);
     if (r.ok) return { url, status: 'ok', manifest: r.manifest };

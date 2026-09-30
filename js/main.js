@@ -5,6 +5,16 @@ import { openLogin, openBackups, confirmSave, confirmConflict } from './ui/dialo
 
 const $ = (id) => document.getElementById(id);
 
+// ---------- anti-clickjacking ----------
+// GitHub Pages non permette header HTTP (X-Frame-Options / frame-ancestors, che nel <meta> è ignorato):
+// se la pagina è dentro un iframe altrui non si carica nessun account.
+if (window.top !== window.self) {
+  document.body.replaceChildren(h('main', { class: 'framed' },
+    h('p', null, 'Per sicurezza StreamSync non funziona dentro un\'altra pagina.'),
+    h('a', { href: location.href, target: '_top', rel: 'noopener' }, 'Apri StreamSync direttamente')));
+  throw new Error('StreamSync: caricamento in un frame bloccato');
+}
+
 // ---------- tema ----------
 const root = document.documentElement;
 function applyTheme() {
@@ -60,6 +70,12 @@ document.addEventListener('keydown', (e) => {
     app.savePanel(p);
   }
 });
+
+// Un link o un file rilasciato fuori dai pannelli farebbe navigare via dalla pagina (bozze comprese).
+document.addEventListener('dragover', (e) => {
+  if (!e.defaultPrevented) { e.preventDefault(); e.dataTransfer.dropEffect = 'none'; }
+});
+document.addEventListener('drop', (e) => { if (!e.defaultPrevented) e.preventDefault(); });
 
 addEventListener('beforeunload', (e) => {
   if (app.dirtyPanels().length) { e.preventDefault(); e.returnValue = ''; }

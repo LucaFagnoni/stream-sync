@@ -3,54 +3,74 @@
 export const uid = () =>
   Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
+/** Stringa sicura da mostrare: i manifest sono dati non fidati e i campi possono avere tipi qualsiasi. */
+export const str = (v) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '');
+export const arr = (v) => (Array.isArray(v) ? v : []);
+
 /**
- * Accetta URL http(s) o stremio:// (e host "nudi") e restituisce un URL assoluto
- * normalizzato, oppure null se non valido.
+ * Accetta URL http(s) o stremio:// (e host "nudi") e restituisce l'URL assoluto, oppure null se non valido.
+ * Il parser serve SOLO a validare: la stringa restituita è quella dell'utente (tranne stremio:// -> https://
+ * e il frammento #…). Ricostruirla con URL#toString() la altererebbe: Chromium, ad esempio, trasforma
+ * `|` in `%7C`, e gli URL degli addon contengono configurazioni e chiavi personali.
  */
 export function parseAddonUrl(input) {
   let s = String(input ?? '').trim();
   if (!s) return null;
   s = s.replace(/^stremio:\/\//i, 'https://');
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) s = 'https://' + s;
+  s = s.replace(/#.*$/s, '');
+  if (/\s/.test(s)) return null;
   try {
     const u = new URL(s);
     if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
     if (!u.hostname.includes('.') && u.hostname !== 'localhost') return null;
-    u.hash = '';
-    return u.toString();
+    return s;
   } catch {
     return null;
   }
 }
 
-/** Garantisce che l'URL termini con /manifest.json (come fa il client Nuvio). */
+export const isHttpUrl = (u) => typeof u === 'string' && /^https?:\/\//i.test(u) && parseAddonUrl(u) !== null;
+
+/** Divide un URL in [prima della query, query con '?'] senza ricodificarlo. */
+const splitQuery = (url) => {
+  const i = url.indexOf('?');
+  return i < 0 ? [url, ''] : [url.slice(0, i), url.slice(i)];
+};
+
+/** Garantisce che l'URL termini con /manifest.json (come fa il client Nuvio), senza toccare il resto. */
 export function toManifestUrl(input) {
   const parsed = parseAddonUrl(input);
   if (!parsed) return String(input ?? '').trim();
-  const u = new URL(parsed);
-  const path = u.pathname.replace(/\/+$/, '');
-  u.pathname = /\/manifest\.json$/i.test(path) ? path : path + '/manifest.json';
-  return u.toString();
+  const [path, query] = splitQuery(parsed);
+  const trimmed = path.replace(/\/+$/, '');
+  return (/\/manifest\.json$/i.test(trimmed) ? trimmed : trimmed + '/manifest.json') + query;
 }
 
-/** URL senza /manifest.json finale (utile per /configure). */
+/** URL senza /manifest.json finale e senza query (per /configure). null se non è un URL http(s). */
 export function baseUrl(input) {
-  const u = new URL(toManifestUrl(input));
-  u.pathname = u.pathname.replace(/\/manifest\.json$/i, '');
-  u.search = '';
-  return u.toString().replace(/\/$/, '');
+  const parsed = parseAddonUrl(input);
+  if (!parsed) return null;
+  return splitQuery(toManifestUrl(parsed))[0].replace(/\/manifest\.json$/i, '');
 }
+
+/** Decodifica solo i %XX di caratteri "innocui", così `|` e `%7C` (o `,` e `%2C`) sono lo stesso addon. */
+const decodeSafe = (s) => s.replace(/%([0-9a-f]{2})/gi, (m, hex) => {
+  const c = String.fromCharCode(parseInt(hex, 16));
+  return /[A-Za-z0-9\-._~!$&'()*+,;=:@|]/.test(c) ? c : m.toUpperCase();
+});
 
 /**
  * Identità di un addon indipendente da differenze cosmetiche
- * (schema stremio://, maiuscole nell'host, slash finali, /manifest.json).
+ * (schema stremio://, maiuscole nell'host, slash finali, /manifest.json, %-encoding di caratteri innocui).
+ * Serve solo per confrontare: non va mai usata come URL.
  */
 export function idOf(input) {
   const parsed = parseAddonUrl(input);
   if (!parsed) return String(input ?? '').trim().toLowerCase();
   const u = new URL(parsed);
   const path = u.pathname.replace(/\/+$/, '').replace(/\/manifest\.json$/i, '').replace(/\/+$/, '');
-  return u.host.toLowerCase() + path + u.search;
+  return u.host.toLowerCase() + decodeSafe(path) + decodeSafe(u.search);
 }
 
 export function hostOf(input) {
@@ -79,6 +99,12 @@ export function hashString(s) {
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** Segnale che scade dopo `ms` (undefined dove AbortSignal.timeout non esiste). */
+export const timeoutSignal = (ms) =>
+  (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(ms) : undefined);
+
+export const isTimeout = (e) => e?.name === 'TimeoutError' || e?.name === 'AbortError';
+
 /** Limita la concorrenza di funzioni asincrone. */
 export function pLimit(max) {
   let active = 0;
@@ -106,13 +132,18 @@ export function debounce(fn, ms) {
   };
 }
 
-/** Estrae tutti gli URL addon da un testo libero (una o più righe, JSON, ecc.). */
+/**
+ * Estrae tutti gli URL addon da un testo libero (una o più righe, JSON, uri-list…).
+ * Virgole e pipe fanno parte degli URL (es. Torrentio: `providers=yts,eztv|qualityfilter=cam`):
+ * si separa solo su spazi, virgolette e parentesi angolari, e su una virgola seguita da un altro URL.
+ */
 export function extractUrls(text) {
-  const found = String(text ?? '').match(/(?:https?|stremio):\/\/[^\s"'<>,\]\[]+/gi) || [];
+  const normalized = String(text ?? '').replace(/,(?=\s*(?:https?|stremio):\/\/)/gi, ' ');
+  const found = normalized.match(/(?:https?|stremio):\/\/[^\s"'<>`]+/gi) || [];
   const seen = new Set();
   const out = [];
   for (const raw of found) {
-    const url = parseAddonUrl(raw);
+    const url = parseAddonUrl(raw.replace(/[.,;:!?)\]}]+$/, ''));
     if (!url) continue;
     const id = idOf(url);
     if (seen.has(id)) continue;

@@ -6,9 +6,11 @@
   <title>StreamSync — addon Nuvio e Stremio</title>
   <meta name="description" content="Gestisci, riordina, aggiorna e copia gli addon di più account Nuvio e Stremio da un'unica pagina.">
   <meta name="referrer" content="no-referrer">
-  <!-- Le credenziali restano nel browser: la CSP limita script e form alla sola origine locale.
-       connect-src è aperto a https/http perché i manifest degli addon stanno su host arbitrari. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src https: http: data:; connect-src https: http:; base-uri 'none'; form-action 'none'">
+  <!-- Le credenziali restano nel browser: la CSP limita script e form alla sola origine locale e
+       impone Trusted Types (nessun innerHTML con stringhe arbitrarie).
+       connect-src è aperto a https/http perché i manifest degli addon stanno su host arbitrari.
+       frame-ancestors non è supportato nel <meta>: l'anti-clickjacking è in js/main.js. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src https: http: data:; connect-src https: http:; base-uri 'none'; form-action 'none'; object-src 'none'; require-trusted-types-for 'script'; trusted-types streamsync-icons">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238b5cf6'/%3E%3Cpath d='M9 12h14M9 20h14M19 8l4 4-4 4M13 16l-4 4 4 4' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="css/styles.css">
 </head>

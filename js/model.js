@@ -4,13 +4,16 @@
 import { uid, idOf, hashString, stableStringify } from './util.js';
 
 export function makeItem(p) {
+  const url = typeof p.url === 'string' ? p.url : String(p.url ?? '');
   return {
     key: p.key || uid(),
-    url: p.url,
-    name: p.name || p.url,
+    url,
+    // Il nome arriva da manifest non fidati: deve essere sempre una stringa (ordinamento, rendering).
+    name: typeof p.name === 'string' && p.name.trim() ? p.name : url,
     enabled: p.enabled !== false,
-    manifest: p.manifest || null,
-    flags: p.flags || {},
+    manifest: p.manifest && typeof p.manifest === 'object' ? p.manifest : null,
+    flags: p.flags && typeof p.flags === 'object' ? p.flags : {},
+    raw: p.raw ?? null,
     isNew: !!p.isNew,
     updatedFrom: p.updatedFrom ?? null,
   };
@@ -88,17 +91,22 @@ export class Panel {
   find(key) { return this.items.find((i) => i.key === key); }
   has(url) { const id = idOf(url); return this.items.some((i) => idOf(i.url) === id); }
 
-  /** Applica una nuova lista registrando lo stato precedente per l'undo. */
+  /** Durante caricamento/salvataggio la lista non si tocca: la modifica andrebbe persa al reload. */
+  get locked() { return this.status === 'saving' || this.status === 'loading'; }
+
+  /** Applica una nuova lista registrando lo stato precedente per l'undo. @returns {boolean} */
   commit(next) {
+    if (this.locked) return false;
     this.past.push(this.items);
     if (this.past.length > 100) this.past.shift();
     this.future = [];
     this.items = next;
     for (const k of [...this.selected]) if (!next.some((i) => i.key === k)) this.selected.delete(k);
+    return true;
   }
 
   undo() {
-    if (!this.past.length) return false;
+    if (!this.past.length || this.locked) return false;
     this.future.push(this.items);
     this.items = this.past.pop();
     this.selected = new Set([...this.selected].filter((k) => this.items.some((i) => i.key === k)));
@@ -106,10 +114,21 @@ export class Panel {
   }
 
   redo() {
-    if (!this.future.length) return false;
+    if (!this.future.length || this.locked) return false;
     this.past.push(this.items);
     this.items = this.future.pop();
     return true;
+  }
+
+  /** Adotta un nuovo stato remoto come base e `items` come bozza (dopo un'unione con il server). */
+  rebase(remote, items) {
+    this.base = remote;
+    this.baseSig = signature(this.kind, remote);
+    this.remoteSig = remoteSignature(remote);
+    this.items = items;
+    this.past = [];
+    this.future = [];
+    this.selected = new Set();
   }
 
   discard() {
@@ -122,7 +141,7 @@ export class Panel {
   /** Inserisce item nuovi alla posizione indicata (o in coda). */
   insert(newItems, index = this.items.length) {
     const at = Math.max(0, Math.min(index, this.items.length));
-    this.commit([...this.items.slice(0, at), ...newItems, ...this.items.slice(at)]);
+    return this.commit([...this.items.slice(0, at), ...newItems, ...this.items.slice(at)]);
   }
 
   /** @returns {{removed: number, blocked: number}} gli addon protetti non vengono rimossi */
@@ -131,8 +150,8 @@ export class Panel {
     const targets = this.items.filter((i) => set.has(i.key));
     const blocked = targets.filter(isProtected).length;
     const kill = new Set(targets.filter((i) => !isProtected(i)).map((i) => i.key));
-    if (kill.size) this.commit(this.items.filter((i) => !kill.has(i.key)));
-    return { removed: kill.size, blocked };
+    const ok = kill.size > 0 && this.commit(this.items.filter((i) => !kill.has(i.key)));
+    return { removed: ok ? kill.size : 0, blocked };
   }
 
   /**
@@ -148,8 +167,7 @@ export class Panel {
     const at = Math.max(0, Math.min(toIndex - before, rest.length));
     const next = [...rest.slice(0, at), ...moving, ...rest.slice(at)];
     if (next.every((i, n) => i === this.items[n])) return false;
-    this.commit(next);
-    return true;
+    return this.commit(next);
   }
 
   moveBy(key, delta) {
@@ -158,27 +176,24 @@ export class Panel {
     if (i < 0 || j < 0 || j >= this.items.length) return false;
     const next = this.items.slice();
     [next[i], next[j]] = [next[j], next[i]];
-    this.commit(next);
-    return true;
+    return this.commit(next);
   }
 
   sortByName() {
     const next = this.items.slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
     if (next.every((i, n) => i === this.items[n])) return false;
-    this.commit(next);
-    return true;
+    return this.commit(next);
   }
 
   setEnabled(keys, enabled) {
     const set = new Set(keys);
     if (!this.items.some((i) => set.has(i.key) && i.enabled !== enabled)) return false;
-    this.commit(this.items.map((i) => (set.has(i.key) ? { ...i, enabled } : i)));
-    return true;
+    return this.commit(this.items.map((i) => (set.has(i.key) ? { ...i, enabled } : i)));
   }
 
   /** Modifica "vera" di un item (finisce nella cronologia e nella bozza). */
   patch(key, changes) {
-    this.commit(this.items.map((i) => (i.key === key ? { ...i, ...changes } : i)));
+    return this.commit(this.items.map((i) => (i.key === key ? { ...i, ...changes } : i)));
   }
 
   /** Annotazione non persistente (es. manifest scaricato per mostrarlo): niente undo, non sporca la bozza. */
@@ -192,6 +207,66 @@ export class Panel {
     const want = on ?? !this.selected.has(key);
     if (want) this.selected.add(key); else this.selected.delete(key);
   }
+}
+
+/** Prende dal server il contenuto di un item che noi non abbiamo modificato. */
+function adoptRemote(kind, item, r) {
+  return kind === 'stremio'
+    ? { ...item, url: r.url, manifest: r.manifest, flags: r.flags, raw: r.raw }
+    : { ...item, url: r.url, name: r.name, enabled: r.enabled };
+}
+
+/**
+ * Prima di un push "sostituisci tutto": per gli item che NON abbiamo modificato si usa la versione
+ * attuale del server (manifest/flag/nome aggiornati altrove), così il salvataggio non li riporta indietro.
+ */
+export function rebaseOnRemote(kind, base, draft, remote) {
+  const baseById = new Map(base.map((i) => [idOf(i.url), i]));
+  const remoteById = new Map(remote.map((i) => [idOf(i.url), i]));
+  return draft.map((item) => {
+    const id = idOf(item.url);
+    const b = baseById.get(id);
+    const r = remoteById.get(id);
+    if (!b || !r || contentSig(kind, b) !== contentSig(kind, item)) return item;
+    return adoptRemote(kind, item, r);
+  });
+}
+
+/**
+ * Unione a tre vie tra base (ciò che avevamo caricato), bozza (le nostre modifiche) e remoto
+ * (lo stato attuale, cambiato da un altro dispositivo). Nessuna delle due parti perde modifiche:
+ *  - aggiunti da noi: restano;             - rimossi da noi: restano rimossi;
+ *  - modificati da noi: vince la bozza;     - invariati da noi: si prende la versione remota;
+ *  - rimossi altrove e non toccati da noi: restano rimossi;
+ *  - aggiunti altrove: inseriti dopo il loro predecessore nella lista remota.
+ * L'ordine segue la bozza.
+ */
+export function mergeThreeWay(kind, base, draft, remote) {
+  const baseById = new Map(base.map((i) => [idOf(i.url), i]));
+  const remoteById = new Map(remote.map((i) => [idOf(i.url), i]));
+  const draftIds = new Set(draft.map((i) => idOf(i.url)));
+  const out = [];
+  for (const item of draft) {
+    const id = idOf(item.url);
+    const b = baseById.get(id);
+    const r = remoteById.get(id);
+    if (!b) { out.push(item); continue; }
+    const mine = contentSig(kind, b) !== contentSig(kind, item);
+    if (!r) { if (mine) out.push(item); continue; }
+    out.push(mine ? item : adoptRemote(kind, item, r));
+  }
+  remote.forEach((r, n) => {
+    const id = idOf(r.url);
+    if (baseById.has(id) || draftIds.has(id)) return;
+    let at = 0;
+    for (let k = n - 1; k >= 0; k--) {
+      const prevId = idOf(remote[k].url);
+      const pos = out.findIndex((o) => idOf(o.url) === prevId);
+      if (pos >= 0) { at = pos + 1; break; }
+    }
+    out.splice(at, 0, r);
+  });
+  return out;
 }
 
 /**

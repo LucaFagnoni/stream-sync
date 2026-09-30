@@ -18,6 +18,7 @@ const HOSTS = {
   'addon-y.test': manifestOf('y', 'Addon Y'),
   'addon-new.test': manifestOf('new', 'Addon New'),
   'cinemeta.test': manifestOf('cine', 'Cinemeta'),
+  'tio.test': manifestOf('tio', 'Torrentio-like', { behaviorHints: { configurable: true } }),
 };
 const desc = (host, flags = {}) => ({ transportUrl: `https://${host}/manifest.json`, manifest: HOSTS[host], flags });
 
@@ -89,7 +90,7 @@ async function installMocks(context) {
     return json({ message: 'unknown' }, 404);
   });
 
-  await context.route(/https:\/\/[a-z-]+\.test\/manifest\.json/, (route) => {
+  await context.route(/https:\/\/[a-z-]+\.test\/.*manifest\.json/, (route) => {
     const host = new URL(route.request().url()).host;
     log.push({ svc: 'addon', host });
     return HOSTS[host]
@@ -133,12 +134,15 @@ const dragToEnd = async (source, panelLoc, opts = {}) => {
 const clearToasts = () => page.evaluate(() => document.querySelectorAll('.toast').forEach((t) => t.remove()));
 const toast = (re) => page.locator('.toast', { hasText: re }).first();
 
-async function addAccount(kind, email, pass) {
-  await page.click('#add-account');
-  await page.locator(`.kind-card.${kind}`).click();
-  await page.fill('dialog input[type=email]', email);
-  await page.fill('dialog input[type=password]', pass);
-  await page.click('dialog button[type=submit]');
+async function addAccount(kind, email, pass, { remember = true, on = page } = {}) {
+  await on.click('#add-account');
+  await on.locator(`.kind-card.${kind}`).click();
+  await on.fill('dialog input[type=email]', email);
+  await on.fill('dialog input[type=password]', pass);
+  const box = on.locator('dialog label.check input[type=checkbox]');
+  assert(!(await box.isChecked()), '"Ricordami" deve essere spento di default');
+  if (remember) await box.check();
+  await on.click('dialog button[type=submit]');
 }
 
 console.log('\nStreamSync e2e');
@@ -262,8 +266,14 @@ await step('rimozione: richiede conferma elencando gli addon, poi scrive la list
   const p = panel(S);
   await row(p, 'Addon A').locator('button[aria-label="Altre azioni"]').click();
   await page.click('.menu-item:has-text("Rimuovi")');
+  const writes = log.filter((l) => l.method === 'addonCollectionSet').length;
   await p.locator('button:has-text("Salva")').click();
   const dlg = page.locator('dialog[open]');
+  await dlg.locator('.name-list li', { hasText: 'Addon A' }).waitFor();
+  await page.keyboard.press('Enter'); // il focus è su "Annulla"
+  await page.locator('dialog[open]').waitFor({ state: 'detached' });
+  eq(log.filter((l) => l.method === 'addonCollectionSet').length, writes, 'Invio ha confermato una rimozione!');
+  await p.locator('button:has-text("Salva")').click();
   await dlg.locator('.name-list li', { hasText: 'Addon A' }).waitFor();
   await clearToasts();
   await dlg.locator('button:has-text("Salva e rimuovi")').click();
@@ -283,6 +293,64 @@ await step('conflitto: se il server è cambiato, il salvataggio chiede cosa fare
   await toast(/ricaricata dal server/).waitFor();
   eq(log.filter((l) => l.method === 'addonCollectionSet').length, writes, 'ha scritto nonostante il conflitto');
   assert((await names(p)).includes('Addon Y'), 'la lista non riflette il server');
+});
+
+await step('conflitto + Invio = "Unisci": tiene sia la modifica fatta altrove sia la nostra', async () => {
+  const p = panel(S);
+  const before = await names(p);
+  await row(p, 'Addon X').locator('button[aria-label="Sposta su"]').click(); // nostra modifica
+  db.stremio.addons = [...db.stremio.addons, desc('addon-new.test')];        // modifica "altrove"
+  await clearToasts();
+  await p.locator('button:has-text("Salva")').click();
+  await page.locator('dialog[open] h2', { hasText: 'cambiata sul server' }).waitFor();
+  await page.keyboard.press('Enter'); // focus sull'azione sicura
+  await toast(/Salvato: s@x.it/).waitFor();
+  const pushed = log.filter((l) => l.method === 'addonCollectionSet').at(-1).body.addons.map((a) => a.manifest.name);
+  assert(pushed.includes('Addon New'), 'persa la modifica fatta altrove');
+  const ix = before.indexOf('Addon X');
+  assert(pushed.indexOf('Addon X') === ix - 1, `persa la nostra modifica: ${JSON.stringify(pushed)}`);
+});
+
+await step('manifest malformato dal server: nessun crash e il descrittore torna intatto al salvataggio', async () => {
+  const bad = { transportUrl: 'https://bad.test/manifest.json', transportName: 'http', extra: { keep: true },
+    manifest: { id: 'bad', name: 42, types: 'movie', resources: { a: 1 }, version: { x: 1 }, description: ['x'], logo: 'javascript:alert(1)', behaviorHints: { configurable: 'yes' } }, flags: {} };
+  db.stremio.addons = [...db.stremio.addons, bad];
+  const p = panel(S);
+  await p.locator('button[aria-label="Menu pannello"]').click();
+  await page.click('.menu-item:has-text("Ricarica dal server")');
+  await row(p, '42').waitFor(); // name: 42 -> mostrato come "42"
+  await row(p, '42').locator('button[aria-label="Sposta su"]').click();
+  await clearToasts();
+  await p.locator('button:has-text("Salva")').click();
+  await toast(/Salvato: s@x.it/).waitFor();
+  const sent = log.filter((l) => l.method === 'addonCollectionSet').at(-1).body.addons.find((a) => a.transportUrl === bad.transportUrl);
+  eq(sent, bad, 'descrittore alterato');
+});
+
+await step('URL con virgole e pipe (stile Torrentio) salvato identico, non troncato', async () => {
+  const url = 'https://tio.test/providers=yts,eztv|qualityfilter=scr,cam|realdebrid=KEY/manifest.json';
+  const p = panel('Nuvio Main');
+  await p.locator('button[aria-label="Aggiungi da URL"]').click();
+  await page.fill('dialog textarea', url);
+  await page.click('dialog button:has-text("Verifica")');
+  await page.locator('dialog .probe.ok').waitFor();
+  await page.locator('dialog button:has-text("Aggiungi 1 addon")').click();
+  await clearToasts();
+  await p.locator('button:has-text("Salva")').click();
+  await toast(/Salvato: Main/).waitFor();
+  const push = log.filter((l) => l.path === '/rest/v1/rpc/sync_push_addons').at(-1);
+  assert(push.body.p_addons.some((a) => a.url === url), `URL alterato: ${JSON.stringify(push.body.p_addons.map((a) => a.url))}`);
+});
+
+await step('link trascinato da fuori (text/uri-list) su un pannello: apre l\'installazione verificata', async () => {
+  await page.evaluate(() => {
+    const dst = document.querySelector('section[aria-label="Nuvio Kids"]');
+    const dt = new DataTransfer();
+    dt.setData('text/uri-list', 'stremio://addon-new.test/manifest.json');
+    for (const type of ['dragover', 'drop']) dst.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
+  });
+  eq(await page.locator('dialog textarea').inputValue(), 'https://addon-new.test/manifest.json');
+  await page.click('dialog button:has-text("Chiudi")');
 });
 
 await step('backup automatico creato prima di ogni scrittura', async () => {
@@ -434,6 +502,34 @@ await step('rimozione account Nuvio: logout con scope=local (non chiude le altre
   await page.waitForFunction(() => document.querySelectorAll('section[aria-label^="Nuvio"]').length === 0);
   assert(log.some((l) => l.path === '/auth/v1/logout?scope=local'), 'logout locale non chiamato');
   assert(!log.some((l) => l.path === '/auth/v1/logout'), 'logout globale chiamato!');
+});
+
+await step('dentro un iframe altrui (clickjacking) non carica account né chiama le API', async () => {
+  const calls = log.length;
+  const framer = await context.newPage();
+  await framer.setContent(`<iframe src="${APP}" width="800" height="600"></iframe>`);
+  await framer.frameLocator('iframe').locator('.framed').waitFor();
+  await framer.waitForTimeout(500);
+  eq(log.length, calls, 'la pagina incorniciata ha contattato le API');
+  await framer.close();
+});
+
+await step('"Ricordami" spento: token solo in sessionStorage, sopravvive al reload ma non a una nuova scheda', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1300, height: 800 } });
+  await installMocks(ctx);
+  const tab = await ctx.newPage();
+  tab.on('pageerror', (e) => errors.push(`pageerror(tab): ${e.message}`));
+  await tab.goto(APP);
+  await addAccount('stremio', 's@x.it', 'pw', { remember: false, on: tab });
+  await tab.locator('section.panel .row').first().waitFor();
+  const local = await tab.evaluate(() => JSON.stringify({ ...localStorage }));
+  assert(!local.includes('SKEY'), 'token finito in localStorage');
+  await tab.reload();
+  await tab.locator('section.panel .row').first().waitFor();
+  const other = await ctx.newPage();
+  await other.goto(APP);
+  await other.locator('.account-card button:has-text("Accedi")').waitFor();
+  await ctx.close();
 });
 
 await step('nessun errore JS / violazione CSP in console', async () => {

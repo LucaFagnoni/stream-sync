@@ -1,7 +1,7 @@
 import { h, icon, iconButton, menu, toast, copyText, confirmDialog } from './dom.js';
 import * as app from '../app.js';
 import { isProtected } from '../model.js';
-import { baseUrl, hostOf } from '../util.js';
+import { baseUrl, hostOf, str, arr, isHttpUrl, extractUrls } from '../util.js';
 import { fetchManifest } from '../manifest.js';
 import { openLogin, openInstall, openImport, openMirror, exportPanels, promptDialog } from './dialogs.js';
 
@@ -12,29 +12,36 @@ const panelEls = new Map();
 const lastClicked = new Map();
 let drag = null; // { panelId, keys }
 
-export const setFilter = (t) => { filterText = t.trim().toLowerCase(); for (const p of app.panelList()) renderPanel(p); };
+export const setFilter = (t) => {
+  filterText = t.trim().toLowerCase();
+  for (const p of app.panelList()) {
+    // Niente azioni su righe che non si vedono: la selezione nascosta dal filtro viene tolta.
+    for (const k of [...p.selected]) { const it = p.find(k); if (it && !matches(it)) p.selected.delete(k); }
+    renderPanel(p);
+  }
+};
 
-const httpUrl = (u) => /^https?:\/\//i.test(u);
+const httpUrl = isHttpUrl;
 const safeColor = (c) => (/^#[0-9a-f]{3,8}$/i.test(c || '') ? c : '#64748b');
 const matches = (i) => !filterText ||
-  `${i.name} ${i.url} ${i.manifest?.description || ''}`.toLowerCase().includes(filterText);
+  `${i.name} ${i.url} ${str(i.manifest?.description)}`.toLowerCase().includes(filterText);
 
 // ---------- riga ----------
 function logo(item) {
   const letter = h('div', { class: 'logo fallback', 'aria-hidden': 'true' }, (displayName(item) || '?').trim().charAt(0).toUpperCase());
-  const src = item.manifest?.logo;
+  const src = str(item.manifest?.logo);
   if (!src || !httpUrl(src)) return letter;
   const img = h('img', { class: 'logo', src, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', draggable: 'false' });
   img.addEventListener('error', () => img.replaceWith(letter), { once: true });
   return img;
 }
 
-const resourceNames = (m) => [...new Set((m?.resources || []).map((r) => (typeof r === 'string' ? r : r?.name)).filter(Boolean))];
+const resourceNames = (m) => [...new Set(arr(m?.resources).map((r) => (typeof r === 'string' ? r : str(r?.name))).filter(Boolean))];
 
 function chips(item) {
   const m = item.manifest;
   const out = [h('span', { class: 'chip host', title: item.url }, hostOf(item.url) || item.url)];
-  const types = m?.types || [];
+  const types = arr(m?.types).map(str).filter(Boolean);
   const res = resourceNames(m);
   // Un chip per gruppo (non uno per valore): tiene le righe compatte.
   if (types.length) out.push(h('span', { class: 'chip type', title: `Tipi: ${types.join(', ')}` }, types.join(' · ')));
@@ -50,7 +57,8 @@ function badges(item) {
   if (isProtected(item)) b.push(h('span', { class: 'badge lock', title: 'Addon protetto: non rimovibile' }, icon('lock', 11), 'Protetto'));
   if (item.isNew) b.push(h('span', { class: 'badge new' }, 'Nuovo'));
   if (item.updatedFrom) {
-    const { from, to } = item.updatedFrom;
+    const from = str(item.updatedFrom.from);
+    const to = str(item.updatedFrom.to);
     b.push(h('span', { class: 'badge upd', title: 'Manifest aggiornato: salva per applicarlo' }, from && to && from !== to ? `Aggiornato ${from} → ${to}` : 'Manifest aggiornato'));
   }
   if (!item.enabled) b.push(h('span', { class: 'badge off' }, 'Disattivato'));
@@ -66,6 +74,8 @@ function statusDot(panel, item) {
 
 function buildRow(panel, item, index) {
   const m = item.manifest;
+  const version = str(m?.version);
+  const description = str(m?.description);
   const sel = h('input', {
     type: 'checkbox', class: 'sel', checked: panel.selected.has(item.key), 'aria-label': `Seleziona ${displayName(item)}`,
     onClick: (e) => onSelect(panel, item, index, e),
@@ -80,8 +90,8 @@ function buildRow(panel, item, index) {
   },
   sel, h('span', { class: 'grip', 'aria-hidden': 'true' }, icon('grip', 14)), logo(item),
   h('div', { class: 'meta' },
-    h('div', { class: 'title' }, h('span', { class: 'name' }, displayName(item)), m?.version ? h('span', { class: 'ver' }, `v${m.version}`) : null, ...badges(item), statusDot(panel, item)),
-    m?.description ? h('div', { class: 'desc' }, m.description) : null,
+    h('div', { class: 'title' }, h('span', { class: 'name' }, displayName(item)), version ? h('span', { class: 'ver' }, `v${version}`) : null, ...badges(item), statusDot(panel, item)),
+    description ? h('div', { class: 'desc' }, description) : null,
     h('div', { class: 'chips' }, ...chips(item))),
   h('div', { class: 'ractions' },
     iconButton('copy', 'Copia URL del manifest', () => copyUrl(item.url)),
@@ -166,7 +176,9 @@ async function itemMenu(anchor, panel, item) {
     { label: 'Copia come link stremio://', icon: 'link', onClick: () => copyUrl(item.url.replace(/^https?:\/\//i, 'stremio://'), 'Link stremio:// copiato') },
     { label: 'Copia il manifest JSON', icon: 'copy', onClick: () => copyManifestJson(item) },
     { label: 'Apri il manifest', icon: 'external', disabled: !httpUrl(item.url), onClick: () => window.open(item.url, '_blank', 'noopener,noreferrer') },
-    m?.behaviorHints?.configurable ? { label: 'Configura addon', icon: 'external', onClick: () => window.open(`${baseUrl(item.url)}/configure`, '_blank', 'noopener,noreferrer') } : null,
+    m?.behaviorHints?.configurable === true && baseUrl(item.url)
+      ? { label: 'Configura addon', icon: 'external', onClick: () => window.open(`${baseUrl(item.url)}/configure`, '_blank', 'noopener,noreferrer') }
+      : null,
     'sep',
     { label: many ? `Copia ${keys.length} in…` : 'Copia in…', icon: 'layers', onClick: () => targetMenu(anchor, panel, keys, false) },
     { label: many ? `Sposta ${keys.length} in…` : 'Sposta in…', icon: 'layers', onClick: () => targetMenu(anchor, panel, keys, true), disabled: panel.readOnly },
@@ -189,6 +201,7 @@ async function copyManifestJson(item) {
 
 async function runCheck(panel, keys) {
   const r = await app.checkItems(panel, keys);
+  if (r.skipped) toast('Salvataggio in corso: gli aggiornamenti trovati non sono stati applicati. Ripeti la verifica.', 'info');
   const parts = [`${r.checked} verificati`];
   if (panel.kind === 'stremio') parts.push(`${r.updated} aggiornati nella bozza`);
   else if (r.updated) parts.push(`${r.updated} nomi aggiornati`);
@@ -233,10 +246,19 @@ function showLine(list, pos) {
   line.style.setProperty('top', `${top - lr.top + list.scrollTop - 1}px`);
 }
 
+const isExternal = (e) => [...(e.dataTransfer?.types || [])].some((t) => t === 'text/uri-list' || t === 'text/plain');
+
 function wireDrop(section, panel) {
   const list = () => section.querySelector('.plist');
   section.addEventListener('dragover', (e) => {
-    if (!drag) return;
+    if (!drag) {
+      // Link trascinato da un'altra scheda/app: si propone l'installazione (verificata) in questo pannello.
+      if (!isExternal(e) || panel.readOnly || panel.status !== 'ready') return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      section.classList.add('drop-target');
+      return;
+    }
     const same = drag.panelId === panel.id;
     if ((!same && (panel.readOnly || panel.status !== 'ready')) || !list()) return;
     e.preventDefault();
@@ -248,7 +270,16 @@ function wireDrop(section, panel) {
     if (!section.contains(e.relatedTarget)) { section.classList.remove('drop-target'); section.querySelector('.drop-line')?.remove(); }
   });
   section.addEventListener('drop', (e) => {
-    if (!drag || !list()) return;
+    if (!drag) {
+      if (!isExternal(e) || panel.readOnly || panel.status !== 'ready') return;
+      e.preventDefault();
+      section.classList.remove('drop-target');
+      const urls = extractUrls(e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain'));
+      if (urls.length) openInstall(panel, { prefill: urls.map((url) => ({ url, enabled: true })) });
+      else toast('Nel contenuto trascinato non c\'è un URL di addon.', 'error');
+      return;
+    }
+    if (!list()) return;
     e.preventDefault();
     const { index } = dropIndex(panel, list(), e.clientY);
     const d = drag;

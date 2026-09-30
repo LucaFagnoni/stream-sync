@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseAddonUrl, toManifestUrl, idOf, baseUrl, extractUrls, pLimit } from '../js/util.js';
-import { Panel, makeItem, planMirror, applyMirror, diffLists } from '../js/model.js';
+import { parseAddonUrl, toManifestUrl, idOf, baseUrl, extractUrls, pLimit, isHttpUrl } from '../js/util.js';
+import { Panel, makeItem, planMirror, applyMirror, diffLists, rebaseOnRemote, mergeThreeWay } from '../js/model.js';
 import { convertItem } from '../js/convert.js';
 import { fromDescriptor, toDescriptor, getAddons, setAddons, login as stremioLogin, StremioError } from '../js/stremio.js';
 import { NuvioSession, NuvioError } from '../js/nuvio.js';
@@ -235,12 +235,13 @@ test('Stremio: errore 1 = sessione scaduta', async () => {
   await assert.rejects(getAddons('x'), (e) => e instanceof StremioError && e.expired === true);
 });
 
-test('Stremio: descrittori round-trip e transportName solo se richiesto', () => {
+test('Stremio: descrittori round-trip; transportName (template) solo per gli addon nuovi', () => {
   const d = { transportUrl: 'https://a/manifest.json', manifest: { id: 'a', name: 'A' }, flags: { official: true } };
   const item = fromDescriptor(d);
   assert.equal(item.name, 'A');
   assert.deepEqual(toDescriptor(item), d);
-  assert.equal(toDescriptor(item, 'http').transportName, 'http');
+  assert.equal(toDescriptor(item, 'http').transportName, undefined, 'non va aggiunto a un descrittore esistente');
+  assert.equal(toDescriptor({ url: 'https://n/manifest.json', manifest: { id: 'n', name: 'N' } }, 'http').transportName, 'http');
   assert.throws(() => toDescriptor({ url: 'x', manifest: null }), /Manifest mancante/);
 });
 
@@ -334,4 +335,173 @@ test('Nuvio: il nome fallback (= URL) viene rimandato come null', async () => {
   const s = new NuvioSession({ access_token: 'AT', refresh_token: 'RT', expires_at: Date.now() + 1e6 });
   await s.pushAddons(1, [{ url: 'https://a/manifest.json', name: 'https://a/manifest.json', enabled: true }]);
   assert.equal(calls[0].body.p_addons[0].name, null);
+});
+
+
+// ---------- regressioni trovate nella revisione di sicurezza/dati ----------
+const TORRENTIO = 'https://torrentio.strem.fun/providers=yts,eztv,1337x|qualityfilter=scr,cam|realdebrid=KEY123/manifest.json';
+
+test('extractUrls NON tronca virgole e pipe (configurazioni tipo Torrentio)', () => {
+  assert.deepEqual(extractUrls(TORRENTIO), [TORRENTIO]);
+  assert.deepEqual(extractUrls(`["${TORRENTIO}"]`), [TORRENTIO]);
+  assert.deepEqual(extractUrls(`${TORRENTIO}\nstremio://b.test/manifest.json`), [TORRENTIO, 'https://b.test/manifest.json']);
+});
+
+test('extractUrls separa liste con virgola e toglie la punteggiatura finale', () => {
+  assert.deepEqual(extractUrls('https://a.test/manifest.json,https://b.test/manifest.json'), ['https://a.test/manifest.json', 'https://b.test/manifest.json']);
+  assert.deepEqual(extractUrls('vedi (https://a.test/manifest.json).'), ['https://a.test/manifest.json']);
+  assert.deepEqual(extractUrls('# commento uri-list\r\nhttps://a.test/manifest.json\r\n'), ['https://a.test/manifest.json']);
+});
+
+test('baseUrl / isHttpUrl rifiutano schemi pericolosi (javascript:, data:)', () => {
+  assert.equal(baseUrl('javascript:alert(1)'), null);
+  assert.equal(baseUrl('data:text/html,<script>alert(1)</script>'), null);
+  assert.equal(isHttpUrl('javascript:alert(1)//https://x.test'), false);
+  assert.equal(isHttpUrl('https://x.test/manifest.json'), true);
+});
+
+test('makeItem: nome e campi non stringa da manifest malformati non rompono nulla', () => {
+  const i = makeItem({ url: 'https://a.test/manifest.json', name: 42, manifest: 'non un oggetto', flags: null });
+  assert.equal(i.name, 'https://a.test/manifest.json');
+  assert.equal(i.manifest, null);
+  assert.deepEqual(i.flags, {});
+  const p = new Panel({ id: 'n', kind: 'nuvio' });
+  p.load([i, makeItem({ url: 'https://b.test', name: { x: 1 } })]);
+  assert.equal(p.sortByName() || true, true); // non lancia
+});
+
+test('fromDescriptor conserva il descrittore originale e toDescriptor non perde campi sconosciuti', () => {
+  const d = { transportUrl: 'https://a/manifest.json', transportName: 'http', manifest: { id: 'a', name: 'A', types: 'movie' }, flags: { protected: true }, extra: { x: 1 } };
+  const back = toDescriptor(fromDescriptor(d), undefined);
+  assert.deepEqual(back, d);
+  // manifest assente sul server: si rimanda il descrittore com'era invece di bloccare il salvataggio
+  const noManifest = { transportUrl: 'https://z/manifest.json', flags: {} };
+  assert.deepEqual(toDescriptor(fromDescriptor(noManifest)), noManifest);
+});
+
+test('Panel bloccato durante il salvataggio: nessuna modifica silenziosamente persa', () => {
+  const p = nuvioPanel(['https://a.test', 'https://b.test']);
+  p.status = 'saving';
+  assert.equal(p.moveBy(p.items[0].key, 1), false);
+  assert.equal(p.insert([mk('https://c.test')]), false);
+  assert.deepEqual(p.remove([p.items[0].key]), { removed: 0, blocked: 0 });
+  assert.equal(p.undo(), false);
+  assert.equal(p.items.length, 2);
+  p.status = 'ready';
+  assert.equal(p.moveBy(p.items[0].key, 1), true);
+});
+
+const smk = (url, version, flags = {}) => makeItem({ url, name: url, manifest: { id: url, name: url, version }, flags });
+
+test('rebaseOnRemote: gli addon non toccati prendono il manifest aggiornato altrove, quelli modificati no', () => {
+  const base = [smk('https://a.test/manifest.json', '1'), smk('https://b.test/manifest.json', '1')];
+  const draft = [base[1], { ...base[0], manifest: { ...base[0].manifest, version: 'mio' } }]; // riordinati + a modificato da noi
+  const remote = [smk('https://a.test/manifest.json', '9'), smk('https://b.test/manifest.json', '2', { official: true })];
+  const out = rebaseOnRemote('stremio', base, draft, remote);
+  assert.deepEqual(out.map((i) => i.manifest.version), ['2', 'mio']);
+  assert.deepEqual(out[0].flags, { official: true });
+});
+
+test('mergeThreeWay: conserva le modifiche di entrambe le parti', () => {
+  const [A, B, C, D, E] = ['a', 'b', 'c', 'd', 'e'].map((x) => mk(`https://${x}.test/manifest.json`, { name: x.toUpperCase() }));
+  const base = [A, B, C, D];
+  // noi: rimuoviamo B, spostiamo D in cima, aggiungiamo E, rinominiamo C
+  const draft = [D, A, { ...C, name: 'C mio' }, E];
+  // altrove: aggiunto X dopo A, rimosso D (che noi abbiamo solo spostato -> contenuto invariato), rinominato A
+  const X = mk('https://x.test/manifest.json', { name: 'X' });
+  const remote = [{ ...A, name: 'A remoto' }, X, B, C];
+  const out = mergeThreeWay('nuvio', base, draft, remote);
+  assert.deepEqual(out.map((i) => i.name), ['A remoto', 'X', 'C mio', 'E']);
+});
+
+test('mergeThreeWay: un addon rimosso altrove ma modificato da noi resta (vince la modifica esplicita)', () => {
+  const A = mk('https://a.test/manifest.json', { name: 'A' });
+  const out = mergeThreeWay('nuvio', [A], [{ ...A, enabled: false }], []);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].enabled, false);
+});
+
+test('mergeThreeWay: stesso addon aggiunto da entrambe le parti non viene duplicato', () => {
+  const N = mk('https://n.test/manifest.json');
+  const out = mergeThreeWay('nuvio', [], [N], [mk('https://n.test/manifest.json/')]);
+  assert.equal(out.length, 1);
+});
+
+test('convertItem: l\'addon locale di Stremio (127.0.0.1) non viene copiato su Nuvio', async () => {
+  const local = mk('http://127.0.0.1:11470/local-addon/manifest.json', { manifest: { id: 'local', name: 'Local Files' } });
+  await assert.rejects(convertItem(local, 'nuvio'), /locale/);
+});
+
+test('Nuvio: refresh fallito per rete NON invalida la sessione (non è "expired")', async () => {
+  globalThis.fetch = async (url) => { if (String(url).includes('refresh_token')) throw new TypeError('Failed to fetch'); return { ok: false, status: 401, text: async () => '{}' }; };
+  const s = new NuvioSession({ access_token: 'x', refresh_token: 'y', expires_at: Date.now() + 1e6 });
+  await assert.rejects(s.listAddons(1), (e) => e instanceof NuvioError && e.expired === false);
+});
+
+test('Nuvio: se un\'altra scheda ha già ruotato il token, lo adotta senza riusare quello consumato', async () => {
+  const seen = [];
+  stubFetch((url, body, init) => {
+    if (url.includes('refresh_token')) { seen.push(body.refresh_token); return { body: tokenBody(9) }; }
+    return init.headers.Authorization === 'Bearer AT-NEW' ? { body: [] } : { status: 401, body: {} };
+  });
+  const latest = { access_token: 'AT-NEW', refresh_token: 'RT-NEW', expires_at: Date.now() + 1e6 };
+  const s = new NuvioSession({ access_token: 'AT-OLD', refresh_token: 'RT-OLD', expires_at: Date.now() + 1e6 }, () => {}, () => latest);
+  await s.listAddons(1);
+  assert.deepEqual(seen, [], 'non doveva chiamare il refresh con il token vecchio');
+  assert.equal(s.session.refresh_token, 'RT-NEW');
+});
+
+test('Nuvio: righe di più utenti nello stesso profilo -> errore, niente push ambiguo', async () => {
+  stubFetch(() => ({ body: [{ url: 'https://a/manifest.json', user_id: 'u1' }, { url: 'https://b/manifest.json', user_id: 'u2' }] }));
+  const s = new NuvioSession({ access_token: 'AT', refresh_token: 'RT', expires_at: Date.now() + 1e6 });
+  await assert.rejects(s.listAddons(1), /più utenti/);
+});
+
+// ---------- store: split localStorage / sessionStorage ----------
+class MemStorage { constructor() { this.m = new Map(); } getItem(k) { return this.m.has(k) ? this.m.get(k) : null; } setItem(k, v) { this.m.set(k, String(v)); } removeItem(k) { this.m.delete(k); } }
+
+test('store: senza "Ricordami" il token va solo in sessionStorage; con, in localStorage', async () => {
+  globalThis.localStorage = new MemStorage();
+  globalThis.sessionStorage = new MemStorage();
+  const store = await import('../js/store.js');
+  store.saveStore({
+    accounts: [
+      { id: 'a', kind: 'stremio', label: 'A', email: 'a@x', remember: false, session: { authKey: 'TEMP' } },
+      { id: 'b', kind: 'stremio', label: 'B', email: 'b@x', remember: true, session: { authKey: 'KEEP' } },
+    ],
+    settings: {},
+  });
+  const local = localStorage.getItem('streamsync.v1');
+  assert.ok(!local.includes('TEMP'), 'token temporaneo finito in localStorage');
+  assert.ok(local.includes('KEEP'));
+  assert.ok(sessionStorage.getItem('streamsync.sessions.v1').includes('TEMP'));
+  const loaded = store.loadStore();
+  assert.equal(loaded.accounts.find((x) => x.id === 'a').session.authKey, 'TEMP');
+  // chiusura della scheda = sessionStorage vuoto: l'account resta ma senza sessione
+  globalThis.sessionStorage = new MemStorage();
+  assert.equal(store.loadStore().accounts.find((x) => x.id === 'a').session, null);
+});
+
+test('store: i backup di un account rimosso vengono cancellati', async () => {
+  globalThis.localStorage = new MemStorage();
+  const store = await import('../js/store.js');
+  store.pushBackup({ ts: 1, accountId: 'a', items: [] });
+  store.pushBackup({ ts: 2, accountId: 'b', items: [] });
+  store.deleteBackupsFor('a');
+  assert.deepEqual(store.listBackups().map((b) => b.accountId), ['b']);
+});
+
+test('parseAddonUrl / toManifestUrl non ricodificano mai l\'URL dell\'utente', () => {
+  // Node non ricodifica `|`, Chromium sì (%7C): si verifica con caratteri che anche Node ricodificherebbe.
+  const raw = 'https://a.test/cfg={"k":"v"}|x/manifest.json?q=1';
+  assert.equal(parseAddonUrl(raw), raw);
+  assert.equal(toManifestUrl(raw), raw);
+  assert.equal(toManifestUrl('https://a.test/cfg={x}|y'), 'https://a.test/cfg={x}|y/manifest.json');
+  assert.equal(parseAddonUrl('stremio://a.test/x|y/manifest.json#frag'), 'https://a.test/x|y/manifest.json');
+  assert.equal(parseAddonUrl('https://a.test/con spazio'), null);
+});
+
+test('idOf: `|` e `%7C`, `,` e `%2C` indicano lo stesso addon', () => {
+  assert.equal(idOf('https://t.test/a,b|c/manifest.json'), idOf('https://t.test/a%2Cb%7Cc/manifest.json'));
+  assert.notEqual(idOf('https://t.test/a%2Fb/manifest.json'), idOf('https://t.test/a/b/manifest.json'));
 });

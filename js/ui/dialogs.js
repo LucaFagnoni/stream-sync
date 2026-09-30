@@ -3,7 +3,7 @@ import * as app from '../app.js';
 import { planMirror } from '../model.js';
 import { buildExport, parseImport } from '../backup.js';
 import { listBackups } from '../store.js';
-import { extractUrls, idOf, hostOf } from '../util.js';
+import { extractUrls, idOf, hostOf, str } from '../util.js';
 
 const field = (label, input, hint) =>
   h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), input, hint ? h('span', { class: 'field-hint' }, hint) : null);
@@ -15,7 +15,7 @@ export function openLogin({ account } = {}) {
     const email = h('input', { type: 'email', required: true, autocomplete: 'username', value: account?.email || '', readonly: !!account, placeholder: 'email@esempio.it' });
     const pass = h('input', { type: 'password', required: true, autocomplete: 'current-password', placeholder: 'Password' });
     const label = h('input', { type: 'text', placeholder: 'Facoltativo, es. "Casa" o "Famiglia"', maxlength: 40 });
-    const remember = h('input', { type: 'checkbox', checked: account ? account.remember : true });
+    const remember = h('input', { type: 'checkbox', checked: account ? account.remember : false });
     const err = h('div', { class: 'form-error', role: 'alert' });
     const submit = h('button', { type: 'submit', class: 'btn primary' }, account ? 'Accedi di nuovo' : 'Accedi e aggiungi');
 
@@ -38,7 +38,7 @@ export function openLogin({ account } = {}) {
         submit.disabled = true;
         submit.textContent = 'Accesso in corso…';
         try {
-          if (account) await app.reauth(account, pass.value);
+          if (account) await app.reauth(account, pass.value, remember.checked);
           else await app.addAccount({ kind, email: email.value, password: pass.value, label: label.value, remember: remember.checked });
           close(true);
         } catch (ex) {
@@ -52,7 +52,8 @@ export function openLogin({ account } = {}) {
     field('Email', email),
     field('Password', pass, 'Non viene mai salvata: serve solo a ottenere un token di sessione.'),
     account ? null : field('Nome', label),
-    h('label', { class: 'check' }, remember, h('span', null, 'Ricordami su questo browser ', h('small', null, '(salva il token di sessione in locale; senza, dovrai riaccedere a ogni visita)'))),
+    h('label', { class: 'check' }, remember, h('span', null, 'Ricordami su questo browser ',
+      h('small', null, 'Salva il token di sessione in modo permanente. È leggibile da chi usa questo browser e da ogni altra pagina dello stesso dominio: attivalo solo su un dispositivo tuo. Se spento, l\'accesso dura finché la scheda resta aperta.'))),
     err,
     h('div', { class: 'dialog-actions' },
       h('button', { type: 'button', class: 'btn', onClick: () => close(false) }, 'Annulla'), submit));
@@ -105,7 +106,7 @@ export function openInstall(panel, { prefill = [] } = {}) {
             onChange: (e) => { if (e.target.checked) picks.add(n); else picks.delete(n); refreshAdd(); } }),
           h('div', null,
             h('strong', null, r.manifest?.name || hostOf(r.url)),
-            r.manifest?.version ? h('span', { class: 'ver' }, ` v${r.manifest.version}`) : null,
+            str(r.manifest?.version) ? h('span', { class: 'ver' }, ` v${str(r.manifest.version)}`) : null,
             h('div', { class: 'probe-sub' }, hostOf(r.url), ' — ', r.error && r.status !== 'unverified' ? `${text}: ${r.error}` : (r.error ? `${text} (${r.error})` : text))));
       }));
     };
@@ -125,14 +126,16 @@ export function openInstall(panel, { prefill = [] } = {}) {
     });
 
     addBtn.addEventListener('click', () => {
+      if (panel.status !== 'ready') { toast('Il pannello è in caricamento o salvataggio: riprova tra un attimo.', 'error'); return; }
       const items = [...picks].sort((a, b) => a - b).map((n) => {
         const it = app.itemFromProbe(results[n], panel.kind);
         const m = meta.get(idOf(it.url));
         return m && m.enabled === false ? { ...it, enabled: false } : it;
       });
-      panel.insert(items);
+      const fresh = items.filter((i) => !panel.has(i.url));
+      if (!panel.insert(fresh)) { toast('Impossibile aggiungere adesso: riprova.', 'error'); return; }
       app.notifyPanel(panel);
-      toast(`${items.length} addon aggiunti alla bozza di «${panel.title}». Ricorda di salvare.`, 'ok');
+      toast(`${fresh.length} addon aggiunti alla bozza di «${panel.title}». Ricorda di salvare.`, 'ok');
       close(true);
     });
 
@@ -212,6 +215,7 @@ export function openMirror(dst) {
       apply.disabled = true;
       apply.textContent = 'Preparazione…';
       const r = await app.mirrorInto(dst, src(), mode);
+      if (r.locked) { toast('Il pannello è in salvataggio: riprova tra un attimo.', 'error'); close(false); return; }
       const parts = [`${r.added} aggiunti`, mode === 'mirror' ? `${r.removed} rimossi` : null].filter(Boolean);
       toast(`Bozza aggiornata (${parts.join(', ')}). Ricorda di salvare.`, r.failed.length ? 'info' : 'ok');
       if (r.failed.length) toast(`Non copiati: ${r.failed.map((f) => `${f.name} (${f.error})`).join('; ')}`, 'error');
@@ -247,7 +251,19 @@ export function openBackups() {
           ? h('ul', { class: 'backup-list' }, ...auto.map((b) => h('li', null,
             h('div', null, h('strong', null, `${b.account || ''} · ${b.title}`), h('small', null, `${fmt(b.ts)} — ${b.items.length} addon`)),
             h('button', { type: 'button', class: 'btn small', onClick: () => downloadFile(`streamsync-auto-${b.ts}.json`, JSON.stringify(buildExport([{ title: b.title, account: b.account, kind: b.kind, items: b.items }]), null, 2)) }, icon('download', 14), ' Scarica'))))
-          : h('p', { class: 'muted' }, 'Ancora nessun backup automatico.')),
+          : h('p', { class: 'muted' }, 'Ancora nessun backup automatico.'),
+        h('h3', null, 'Dati in questo browser'),
+        h('p', { class: 'field-hint' }, 'Esce da tutti gli account (invalidando i token sul server) e cancella token, backup e impostazioni salvati qui. Da usare su un computer non tuo o se temi che un token sia stato esposto.'),
+        h('div', { class: 'row-actions' }, h('button', { type: 'button', class: 'btn danger', onClick: async () => {
+          const ok = await confirmDialog({
+            title: 'Uscire da tutto e cancellare i dati locali?', danger: true, confirm: 'Esci e cancella',
+            body: h('p', null, 'Le modifiche non salvate andranno perse. Gli addon sui server non vengono toccati.'),
+          });
+          if (!ok) return;
+          await app.forgetEverything();
+          toast('Disconnesso da tutti gli account. Dati locali cancellati.', 'ok');
+          close();
+        } }, icon('logout', 15), ' Esci da tutto e cancella i dati locali'))),
       h('div', { class: 'dialog-actions' }, h('button', { type: 'button', class: 'btn', onClick: () => close() }, 'Chiudi')));
   }, { wide: true, label: 'Backup' });
 }
@@ -273,12 +289,15 @@ export async function confirmSave(panel, diff) {
 export async function confirmConflict(panel, remoteItems) {
   const r = await confirmDialog({
     title: 'La lista è cambiata sul server',
-    danger: true,
-    confirm: 'Sovrascrivi con la mia bozza',
-    extra: [{ label: 'Ricarica dal server', value: 'reload' }],
+    confirm: 'Unisci le modifiche',
+    focus: 'confirm',
+    extra: [{ label: 'Ricarica dal server', value: 'reload' }, { label: 'Sovrascrivi', value: 'overwrite', danger: true }],
     body: h('div', null,
       h('p', null, `«${panel.title}» è stata modificata da un altro dispositivo o app dopo che l'hai caricata (ora ha ${remoteItems.length} addon).`),
-      h('p', null, 'Sovrascrivendo perderai quelle modifiche. Ricaricando perderai invece le tue modifiche non salvate.')),
+      h('ul', { class: 'name-list' },
+        h('li', null, h('strong', null, 'Unisci'), ' (consigliato): applica le tue modifiche sopra quelle fatte altrove, senza perderne nessuna.'),
+        h('li', null, h('strong', null, 'Ricarica'), ': scarta le tue modifiche.'),
+        h('li', null, h('strong', null, 'Sovrascrivi'), ': scarta le modifiche fatte altrove.'))),
   });
-  return r === true ? 'overwrite' : r === 'reload' ? 'reload' : 'cancel';
+  return r === true ? 'merge' : r === 'reload' ? 'reload' : r === 'overwrite' ? 'overwrite' : 'cancel';
 }

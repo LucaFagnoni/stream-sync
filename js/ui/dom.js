@@ -54,6 +54,12 @@ const ICONS = {
   user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
 };
 
+// Trusted Types: l'unico innerHTML dell'app accetta solo il NOME di un'icona e restituisce il markup
+// costante corrispondente. Con la CSP `require-trusted-types-for 'script'` qualunque altro innerHTML fallisce.
+const iconPolicy = globalThis.trustedTypes?.createPolicy?.('streamsync-icons', {
+  createHTML: (name) => (Object.hasOwn(ICONS, name) ? ICONS[name] : ''),
+});
+
 export function icon(name, size = 16) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');
@@ -66,7 +72,7 @@ export function icon(name, size = 16) {
   svg.setAttribute('stroke-linejoin', 'round');
   svg.setAttribute('aria-hidden', 'true');
   svg.classList.add('icon');
-  svg.innerHTML = ICONS[name] || ''; // costanti statiche definite sopra, mai dati esterni
+  svg.innerHTML = iconPolicy ? iconPolicy.createHTML(name) : (Object.hasOwn(ICONS, name) ? ICONS[name] : '');
   return svg;
 }
 
@@ -111,7 +117,8 @@ export function menu(anchor, items) {
 
 addEventListener('pointerdown', (e) => { if (openMenu && !openMenu.contains(e.target)) closeMenu(); }, true);
 addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
-addEventListener('scroll', closeMenu, true);
+// Lo scroll DENTRO il menu (lista lunga di destinazioni) non deve chiuderlo.
+addEventListener('scroll', (e) => { if (openMenu && !openMenu.contains(e.target)) closeMenu(); }, true);
 addEventListener('resize', closeMenu);
 
 // ---------- dialog ----------
@@ -126,7 +133,11 @@ export function dialog(build, { wide = false, label = '' } = {}) {
     const close = (v) => { value = v; d.close(); };
     d.append(build(close));
     d.addEventListener('close', () => { d.remove(); resolve(value); });
-    d.addEventListener('click', (e) => { if (e.target === d) close(undefined); });
+    // Chiude con un click sullo sfondo, ma non se il click è iniziato dentro (es. selezione di testo
+    // trascinata fuori): altrimenti si perderebbe quanto scritto o incollato.
+    let downOnBackdrop = false;
+    d.addEventListener('pointerdown', (e) => { downOnBackdrop = e.target === d; });
+    d.addEventListener('click', (e) => { if (e.target === d && downOnBackdrop) close(undefined); });
     document.body.append(d);
     d.showModal();
   });
@@ -135,14 +146,20 @@ export function dialog(build, { wide = false, label = '' } = {}) {
 export const dialogHeader = (title, close) =>
   h('div', { class: 'dialog-head' }, h('h2', null, title), iconButton('x', 'Chiudi', () => close(undefined)));
 
-export function confirmDialog({ title, body, confirm = 'Conferma', cancel = 'Annulla', danger = false, extra = [] }) {
+/**
+ * Dialog di conferma. Nei dialog distruttivi (`danger`) il focus iniziale va sull'azione SICURA:
+ * un Invio premuto per abitudine non deve cancellare o sovrascrivere nulla.
+ * extra: [{ label, value, danger? }] pulsanti aggiuntivi; `focus`: 'confirm' | 'cancel'.
+ */
+export function confirmDialog({ title, body, confirm = 'Conferma', cancel = 'Annulla', danger = false, extra = [], focus }) {
+  const focusConfirm = focus ? focus === 'confirm' : !danger;
   return dialog((close) => h('div', { class: 'dialog-body' },
     dialogHeader(title, close),
     h('div', { class: 'dialog-content' }, body),
     h('div', { class: 'dialog-actions' },
-      ...extra.map((x) => h('button', { type: 'button', class: 'btn', onClick: () => close(x.value) }, x.label)),
-      h('button', { type: 'button', class: 'btn', onClick: () => close(false) }, cancel),
-      h('button', { type: 'button', class: `btn ${danger ? 'danger' : 'primary'}`, onClick: () => close(true), autofocus: true }, confirm))), { label: title });
+      ...extra.map((x) => h('button', { type: 'button', class: `btn${x.danger ? ' danger' : ''}`, onClick: () => close(x.value) }, x.label)),
+      h('button', { type: 'button', class: 'btn', onClick: () => close(false), autofocus: !focusConfirm }, cancel),
+      h('button', { type: 'button', class: `btn ${danger ? 'danger' : 'primary'}`, onClick: () => close(true), autofocus: focusConfirm }, confirm))), { label: title });
 }
 
 // ---------- clipboard / download ----------

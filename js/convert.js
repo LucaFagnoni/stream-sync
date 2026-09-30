@@ -1,7 +1,7 @@
 // Conversione di un item tra tipi di account (Stremio <-> Nuvio) per copia / specchio.
 
 import { makeItem } from './model.js';
-import { toManifestUrl } from './util.js';
+import { toManifestUrl, hostOf, str } from './util.js';
 import { fetchManifest } from './manifest.js';
 
 /**
@@ -11,9 +11,13 @@ import { fetchManifest } from './manifest.js';
 export async function convertItem(item, kind, { fetcher = fetchManifest } = {}) {
   const url = toManifestUrl(item.url);
   if (kind === 'nuvio') {
+    // Es. "Local Files" di Stremio (127.0.0.1:11470): esiste solo dentro l'app Stremio.
+    if (/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(hostOf(url))) {
+      throw new Error('addon locale di Stremio, non utilizzabile su Nuvio');
+    }
     return makeItem({
       url,
-      name: item.manifest?.name || item.name,
+      name: str(item.manifest?.name) || item.name,
       enabled: item.enabled !== false,
       manifest: item.manifest || null,
       isNew: true,
