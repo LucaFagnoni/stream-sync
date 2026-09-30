@@ -19,7 +19,7 @@ Non serve build né dipendenze: la cartella si può pubblicare così com'è su q
 ## Funzioni
 
 - **Più account insieme**: Stremio (una lista) e Nuvio (fino a 6 profili, una lista ciascuno), affiancati.
-- **Drag & drop**: riordina nella stessa lista; trascina in un'altra lista per **copiare**; tieni **Maiusc** al rilascio per **spostare**. Selezione multipla con checkbox (Maiusc+click per intervalli). In alternativa ai gesti: menu «Copia in… / Sposta in…» (utile da touch) e `Alt+↑/↓` per riordinare da tastiera.
+- **Drag & drop**: riordina nella stessa lista (avvicinandoti a un bordo la board e le liste scorrono, per raggiungere i pannelli fuori schermo); trascina in un'altra lista per **copiare**; tieni **Maiusc** al rilascio per **spostare**. Selezione multipla con checkbox (Maiusc+click per intervalli). In alternativa ai gesti: menu «Copia in… / Sposta in…» (utile da touch) e `Alt+↑/↓` per riordinare da tastiera.
 - **Bozza + Salva**: ogni modifica resta locale (con undo/redo, `Ctrl+Z`) finché non premi *Salva* (`Ctrl+S`). Il riepilogo `+2 −1 ~1 ↕` mostra cosa cambierà.
 - **Copia manifest**: URL, link `stremio://`, JSON completo, tutti gli URL di una lista; apri manifest e pagina di configurazione.
 - **Verifica e aggiorna**: riscarica i manifest; su Stremio i manifest cambiati finiscono nella bozza (con badge versione `2.0.0 → 3.0.0`), su Nuvio si aggiorna il nome e si mostra lo stato (online / non raggiungibile).
@@ -76,5 +76,7 @@ js/model.js convert.js backup.js store.js      # bozza, conversione, import/expo
 js/app.js                                      # controller (account, salvataggio, copia)
 js/ui/dom.js views.js dialogs.js  js/main.js   # interfaccia
 ```
+
+I loghi in `img/` sono marchi di Stremio e Nuvio, scaricati dai rispettivi siti ufficiali e usati solo per indicare a quale servizio appartiene un account. Sono serviti in locale, così la pagina non contatta siti terzi.
 
 Riferimenti: [stremio-api-client](https://github.com/Stremio/stremio-api-client) · [Nuvio API](https://nuvio.tv/docs)

@@ -56,9 +56,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .chip-acc.connecting .status-dot { background: var(--warn); animation: pulse 1s infinite; }
 .chip-dirty { color: var(--warn); font-size: 11px; }
 @keyframes pulse { 50% { opacity: .3; } }
-.kind-badge { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; color: #fff; font-weight: 700; font-size: 13px; flex: none; }
-.kind-badge.small { width: 18px; height: 18px; border-radius: 5px; font-size: 10.5px; }
-.kind-badge.stremio { background: var(--stremio); } .kind-badge.nuvio { background: var(--nuvio); }
+.kind-logo { flex: none; object-fit: contain; display: block; }
+.kind-card-title { display: flex; align-items: center; gap: 8px; }
 
 /* ---- board ---- */
 .board { flex: 1; min-height: 0; display: flex; gap: 14px; padding: 14px 16px 18px; overflow-x: auto; align-items: stretch; }

@@ -219,6 +219,32 @@ await step('drag & drop Nuvio → Stremio: scarica il manifest e aggiunge il des
   eq(set.body.addons[3].flags, {}, 'le copie non devono ereditare i flag');
 });
 
+await step('trascinando verso il bordo la board scorre fino a un pannello fuori schermo', async () => {
+  await page.setViewportSize({ width: 820, height: 900 });
+  await page.evaluate(() => { document.getElementById('board').scrollLeft = 0; });
+  assert(!(await panel('Nuvio Kids').isVisible()) || (await panel('Nuvio Kids').boundingBox()).x > 820, 'Kids dovrebbe essere fuori schermo');
+  const box = await row(panel(S), 'Addon B').boundingBox();
+  await page.mouse.move(box.x + 60, box.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 90, box.y + 40, { steps: 3 });
+  // 40 px dal bordo: lo scorrimento nativo di Chromium parte solo negli ultimi ~8 px, quindi qui scorre solo grazie all'app
+  await page.mouse.move(780, 500, { steps: 10 });
+  await page.waitForFunction(() => document.getElementById('board').scrollLeft > 500, null, { timeout: 6000 });
+  const list = await panel('Nuvio Kids').locator('.plist').boundingBox();
+  assert(list.x < 820, 'Kids non è entrato nello schermo');
+  await page.mouse.move(Math.max(list.x + 40, 200), list.y + list.height - 15, { steps: 6 });
+  await page.mouse.up();
+  await row(panel('Nuvio Kids'), 'Addon B').waitFor();
+  await panel('Nuvio Kids').locator('button:has-text("Annulla")').first().click();
+  await page.setViewportSize({ width: 1500, height: 900 });
+  await page.evaluate(() => { document.getElementById('board').scrollLeft = 0; });
+});
+
+await step('loghi Stremio e Nuvio caricati nelle schede', async () => {
+  const ok = await page.evaluate(() => [...document.querySelectorAll('img.kind-logo')].map((i) => i.complete && i.naturalWidth > 0));
+  assert(ok.length >= 4 && ok.every(Boolean), `loghi non caricati: ${JSON.stringify(ok)}`);
+});
+
 await step('riordino con i pulsanti + undo/redo; il salvataggio scrive il nuovo ordine', async () => {
   const p = panel(S);
   await row(p, 'Addon B').locator('button[aria-label="Sposta su"]').click();

@@ -1,4 +1,4 @@
-import { h, icon, dialog, dialogHeader, confirmDialog, toast, downloadFile } from './dom.js';
+import { h, icon, dialog, dialogHeader, confirmDialog, toast, downloadFile, kindLogo } from './dom.js';
 import * as app from '../app.js';
 import { planMirror } from '../model.js';
 import { buildExport, parseImport } from '../backup.js';
@@ -25,7 +25,7 @@ export function openLogin({ account } = {}) {
         type: 'button', role: 'radio', 'aria-checked': String(kind === k), class: `kind-card ${k}${kind === k ? ' on' : ''}`,
         disabled: !!account && account.kind !== k,
         onClick: () => { kind = k; renderKinds(); },
-      }, h('strong', null, k === 'stremio' ? 'Stremio' : 'Nuvio'),
+      }, h('span', { class: 'kind-card-title' }, kindLogo(k, 22), h('strong', null, k === 'stremio' ? 'Stremio' : 'Nuvio')),
       h('small', null, k === 'stremio' ? 'Account email/password' : 'Account con profili (1–6)'))));
     };
     renderKinds();

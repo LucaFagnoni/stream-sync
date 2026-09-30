@@ -76,6 +76,15 @@ export function icon(name, size = 16) {
   return svg;
 }
 
+/** Logo del servizio (file locali in img/: nessuna richiesta a siti terzi). */
+export function kindLogo(kind, size = 26) {
+  const name = kind === 'nuvio' ? 'Nuvio' : 'Stremio';
+  return h('img', {
+    class: `kind-logo ${kind}`, src: `img/${kind === 'nuvio' ? 'nuvio' : 'stremio'}.png`, alt: name, title: name,
+    width: size, height: size, draggable: 'false',
+  });
+}
+
 export function iconButton(name, label, onClick, extra = {}) {
   return h('button', { type: 'button', class: 'icon-btn', title: label, 'aria-label': label, onClick, ...extra }, icon(name));
 }

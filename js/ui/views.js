@@ -1,4 +1,4 @@
-import { h, icon, iconButton, menu, toast, copyText, confirmDialog } from './dom.js';
+import { h, icon, iconButton, menu, toast, copyText, confirmDialog, kindLogo } from './dom.js';
 import * as app from '../app.js';
 import { isProtected } from '../model.js';
 import { baseUrl, hostOf, str, arr, isHttpUrl, extractUrls } from '../util.js';
@@ -221,7 +221,54 @@ function onDragStart(e, panel, item, row) {
   });
 }
 
+// ---------- scorrimento automatico durante il trascinamento ----------
+// Il browser non fa scorrere da solo la board orizzontale (né le liste) mentre si trascina:
+// avvicinandosi a un bordo si scorre, così si raggiungono i pannelli fuori schermo.
+const EDGE = 90;
+const MAX_SPEED = 26;
+let scroll = { dx: 0, dy: 0, list: null };
+let scrollRaf = 0;
+
+const edgeSpeed = (pos, start, end) => {
+  const z = Math.min(EDGE, (end - start) / 3);
+  if (pos < start + z) return -Math.ceil(MAX_SPEED * Math.min(1, (start + z - pos) / z) ** 2);
+  if (pos > end - z) return Math.ceil(MAX_SPEED * Math.min(1, (pos - (end - z)) / z) ** 2);
+  return 0;
+};
+
+function scrollTick() {
+  if (!drag || (!scroll.dx && !scroll.dy)) { scrollRaf = 0; return; }
+  if (scroll.dx) board.scrollLeft += scroll.dx;
+  if (scroll.dy) (scroll.list || board).scrollTop += scroll.dy;
+  scrollRaf = requestAnimationFrame(scrollTick);
+}
+
+function stopAutoScroll() {
+  scroll = { dx: 0, dy: 0, list: null };
+  if (scrollRaf) cancelAnimationFrame(scrollRaf);
+  scrollRaf = 0;
+}
+
+document.addEventListener('dragover', (e) => {
+  if (!drag || !board) return;
+  const b = board.getBoundingClientRect();
+  const left = Math.max(b.left, 0);
+  const right = Math.min(b.right, innerWidth);
+  scroll.dx = board.scrollWidth > board.clientWidth ? edgeSpeed(e.clientX, left, right) : 0;
+  // Verticale: la lista sotto il puntatore, oppure la board stessa (layout a colonna su schermi stretti).
+  const list = e.target.closest?.('.plist');
+  const vScroller = list && list.scrollHeight > list.clientHeight ? list
+    : board.scrollHeight > board.clientHeight ? board : null;
+  if (vScroller) {
+    const r = vScroller.getBoundingClientRect();
+    scroll.dy = edgeSpeed(e.clientY, Math.max(r.top, 0), Math.min(r.bottom, innerHeight));
+    scroll.list = vScroller;
+  } else scroll.dy = 0;
+  if ((scroll.dx || scroll.dy) && !scrollRaf) scrollRaf = requestAnimationFrame(scrollTick);
+}, true);
+
 function endDrag() {
+  stopAutoScroll();
   drag = null;
   for (const el of board.querySelectorAll('.dragging, .drop-target')) el.classList.remove('dragging', 'drop-target');
   for (const el of board.querySelectorAll('.drop-line')) el.remove();
@@ -368,7 +415,7 @@ function buildPanel(panel) {
     'aria-label': `${panel.kind === 'nuvio' ? 'Nuvio' : 'Stremio'} ${panel.title}`,
   },
   h('header', { class: 'phead' },
-    h('span', { class: `kind-badge ${panel.kind}`, title: panel.kind === 'nuvio' ? 'Nuvio' : 'Stremio' }, panel.kind === 'nuvio' ? 'N' : 'S'),
+    kindLogo(panel.kind),
     h('div', { class: 'ptitle' }, h('strong', null, panel.title), h('small', null, panel.kind === 'nuvio' ? `${app.accountOf(panel)?.label} · profilo ${panel.profile}` : panel.subtitle)),
     h('div', { class: 'pbtns' },
       iconButton('undo', 'Annulla (Ctrl+Z)', () => { panel.undo(); app.notifyPanel(panel); }, { disabled: !panel.canUndo || undefined }),
@@ -411,7 +458,7 @@ function accountCard(acc) {
   const auth = acc.status === 'auth';
   return h('section', { class: `panel account-card ${acc.kind}`, dataset: { account: acc.id } },
     h('header', { class: 'phead' },
-      h('span', { class: `kind-badge ${acc.kind}` }, acc.kind === 'nuvio' ? 'N' : 'S'),
+      kindLogo(acc.kind),
       h('div', { class: 'ptitle' }, h('strong', null, acc.label), h('small', null, acc.email))),
     acc.status === 'connecting' || acc.status === 'idle'
       ? h('div', { class: 'note' }, h('span', { class: 'spinner' }), 'Connessione…')
@@ -444,7 +491,7 @@ export function renderAccounts(strip) {
         'sep',
         { label: 'Rimuovi account…', icon: 'logout', danger: true, onClick: () => removeAcc(acc) },
       ].filter(Boolean)),
-    }, h('span', { class: 'status-dot' }), h('span', { class: 'kind-badge small ' + acc.kind }, acc.kind === 'nuvio' ? 'N' : 'S'),
+    }, h('span', { class: 'status-dot' }), kindLogo(acc.kind, 18),
     h('span', { class: 'chip-label' }, acc.label), dirty ? h('span', { class: 'chip-dirty', title: 'Modifiche non salvate' }, '●') : null);
     return chip;
   }));
