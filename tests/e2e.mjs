@@ -241,8 +241,13 @@ await step('trascinando verso il bordo la board scorre fino a un pannello fuori 
 });
 
 await step('loghi Stremio e Nuvio caricati nelle schede', async () => {
-  const ok = await page.evaluate(() => [...document.querySelectorAll('img.kind-logo')].map((i) => i.complete && i.naturalWidth > 0));
-  assert(ok.length >= 4 && ok.every(Boolean), `loghi non caricati: ${JSON.stringify(ok)}`);
+  // I pannelli si ridisegnano spesso (nuovi <img> dalla cache): si attende il caricamento invece di campionare un istante.
+  await page.waitForFunction(() => {
+    const imgs = [...document.querySelectorAll('img.kind-logo')];
+    return imgs.length >= 4 && imgs.every((i) => i.complete && i.naturalWidth > 0);
+  }, null, { timeout: 5000 });
+  const srcs = await page.evaluate(() => [...new Set([...document.querySelectorAll('img.kind-logo')].map((i) => i.getAttribute('src')))].sort());
+  eq(srcs, ['img/nuvio.png', 'img/stremio.png']);
 });
 
 await step('riordino con i pulsanti + undo/redo; il salvataggio scrive il nuovo ordine', async () => {
