@@ -6,6 +6,7 @@ import { listBackups } from '../store.js';
 import { installSection } from './install-ui.js';
 import { extractUrls, idOf, hostOf, str, shownName } from '../util.js';
 import { t, getLang, setLang, locale, LANGUAGES } from '../i18n.js';
+import { THEMES, currentTheme, setTheme } from './theme.js';
 
 const field = (label, input, hint) =>
   h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), input, hint ? h('span', { class: 'field-hint' }, hint) : null);
@@ -254,24 +255,50 @@ export function openBackups() {
             h('div', null, h('strong', null, `${b.account || ''} · ${b.title}`), h('small', null, `${fmt(b.ts)} — ${t('{n} addons', { n: b.items.length })}`)),
             h('button', { type: 'button', class: 'btn small', onClick: () => downloadFile(`addon-manager-auto-${b.ts}.json`, JSON.stringify(buildExport([{ title: b.title, account: b.account, kind: b.kind, items: b.items }]), null, 2)) }, icon('download', 14), ' ', t('Download')))))
           : h('p', { class: 'muted' }, t('No automatic backups yet.')),
-        h('h3', null, t('Language')),
-        languageSection(),
-        h('h3', null, t('Install as an app')),
-        installSection(),
-        h('h3', null, t('Data in this browser')),
-        h('p', { class: 'field-hint' }, t('Signs out of all accounts (invalidating the tokens on the server) and deletes the tokens, backups and settings saved here. Use it on a computer that is not yours or if you fear a token has been exposed.')),
-        h('div', { class: 'row-actions' }, h('button', { type: 'button', class: 'btn danger', onClick: async () => {
-          const ok = await confirmDialog({
-            title: t('Sign out of everything and delete local data?'), danger: true, confirm: t('Sign out and delete'),
-            body: h('p', null, t('Unsaved changes will be lost. The addons on the servers are not touched.')),
-          });
-          if (!ok) return;
-          await app.forgetEverything();
-          toast(t('Signed out of all accounts. Local data deleted.'), 'ok');
-          close();
-        } }, icon('logout', 15), ' ', t('Sign out of everything and delete local data')))),
+      ),
       h('div', { class: 'dialog-actions' }, h('button', { type: 'button', class: 'btn', onClick: () => close() }, t('Close'))));
   }, { wide: true, label: t('Backup') });
+}
+
+// ---------- impostazioni ----------
+/** Impostazioni dell'app (ingranaggio nella barra): lingua, tema, installazione e dati salvati in questo browser. */
+export function openSettings() {
+  return dialog((close) => h('div', { class: 'dialog-body' },
+    dialogHeader(t('Settings'), close),
+    h('div', { class: 'dialog-content' },
+      h('h3', null, t('Language')),
+      // il dialogo si riapre nella nuova lingua
+      languageSection({ onChange: () => { close(); openSettings(); } }),
+      h('h3', null, t('Theme')),
+      themeSection(),
+      h('h3', null, t('Install as an app')),
+      installSection(),
+      h('h3', null, t('Data in this browser')),
+      h('p', { class: 'field-hint' }, t('Signs out of all accounts (invalidating the tokens on the server) and deletes the tokens, backups and settings saved here. Use it on a computer that is not yours or if you fear a token has been exposed.')),
+      h('div', { class: 'row-actions' }, h('button', { type: 'button', class: 'btn danger', onClick: async () => {
+        const ok = await confirmDialog({
+          title: t('Sign out of everything and delete local data?'), danger: true, confirm: t('Sign out and delete'),
+          body: h('p', null, t('Unsaved changes will be lost. The addons on the servers are not touched.')),
+        });
+        if (!ok) return;
+        await app.forgetEverything();
+        toast(t('Signed out of all accounts. Local data deleted.'), 'ok');
+        close();
+      } }, icon('logout', 15), ' ', t('Sign out of everything and delete local data')))),
+    h('div', { class: 'dialog-actions' }, h('button', { type: 'button', class: 'btn', onClick: () => close() }, t('Close')))), { wide: true, label: t('Settings') });
+}
+
+/** Chiaro / scuro / automatico (segue il sistema). */
+function themeSection() {
+  const labels = { auto: t('Auto'), light: t('Light'), dark: t('Dark') };
+  const icons = { auto: 'monitor', light: 'sun', dark: 'moon' };
+  const group = h('div', { class: 'row-actions', role: 'radiogroup', 'aria-label': t('Theme') });
+  const render = () => fill(group, ...THEMES.map((mode) => h('button', {
+    type: 'button', role: 'radio', 'aria-checked': String(mode === currentTheme()), class: `btn${mode === currentTheme() ? ' primary' : ''}`, dataset: { theme: mode },
+    onClick: () => { setTheme(mode); render(); },
+  }, icon(icons[mode], 15), ' ', labels[mode])));
+  render();
+  return h('div', null, group, h('p', { class: 'field-hint' }, t('Auto follows the light or dark setting of your device.')));
 }
 
 // ---------- conferme di salvataggio ----------
@@ -309,11 +336,11 @@ export async function confirmConflict(panel, remoteItems) {
 }
 
 // ---------- lingua ----------
-/** Scelta della lingua nella finestra Backup (sui telefoni la barra in alto non ha spazio per il pulsante). */
-export function languageSection({ small = false, className = 'row-actions' } = {}) {
+/** Scelta della lingua (Impostazioni e schermata iniziale). `onChange` parte dopo il cambio. */
+export function languageSection({ small = false, className = 'row-actions', onChange } = {}) {
   return h('div', { class: className, role: 'radiogroup', 'aria-label': t('Language') },
     ...Object.entries(LANGUAGES).map(([code, l]) => h('button', {
       type: 'button', role: 'radio', 'aria-checked': String(code === getLang()), class: `btn${small ? ' small' : ''}${code === getLang() ? ' primary' : ''}`,
-      onClick: () => { if (code !== getLang()) { setLang(code); document.querySelector('dialog[open] .dialog-head .icon-btn')?.click(); } },
+      onClick: () => { if (code !== getLang()) { setLang(code); onChange?.(); } },
     }, l.name)));
 }

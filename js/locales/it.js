@@ -7,7 +7,6 @@ export default {
   "Skip to the lists": "Vai alle liste",
   "Backup and export": "Backup ed esportazione",
   "Backup": "Backup",
-  "Change theme": "Cambia tema",
   "Language": "Lingua",
   "Add account": "Aggiungi account",
   "Search addons": "Cerca addon",
@@ -308,4 +307,10 @@ export default {
   "It opens in a window of its own, with its own icon; the interface also loads without a connection (managing addons needs the network).": "Si apre in una finestra tutta sua, con la propria icona; l'interfaccia si carica anche senza connessione (per gestire gli addon serve la rete).",
   "URLs found in the file": "URL trovati nel file",
   "There is no addon URL in the dragged content.": "Nel contenuto trascinato non c'è un URL di addon.",
+  "Settings": "Impostazioni",
+  "Theme": "Tema",
+  "Auto": "Automatico",
+  "Light": "Chiaro",
+  "Dark": "Scuro",
+  "Auto follows the light or dark setting of your device.": "Automatico segue l'impostazione chiara o scura del dispositivo.",
 };

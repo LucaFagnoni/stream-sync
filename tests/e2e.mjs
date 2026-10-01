@@ -755,7 +755,8 @@ await step('lingua: alla prima visita l\'app è in inglese (US), qualunque sia l
   eq(await lpage.title(), 'Addon Manager — Stremio and Nuvio');
   eq((await lpage.locator('.empty-state h2').innerText()).trim(), 'Manage the addons of all your accounts');
   eq(await lpage.locator('#search').getAttribute('placeholder'), 'Search all lists  ( / )');
-  eq((await lpage.locator('#lang').innerText()).trim(), 'EN');
+  eq(await lpage.locator('#settings').getAttribute('aria-label'), 'Settings');
+  assert((await lpage.locator('#theme, #lang').count()) === 0, 'tema e lingua non hanno più un pulsante nella barra');
   const text = await visibleText(lpage);
   assert(!ITALIAN_WORDS.test(text), `parole italiane in una pagina inglese: ${text.match(ITALIAN_WORDS)?.[0]}`);
   eq(await lpage.evaluate(() => localStorage.getItem('addonmanager.lang')), null, 'la lingua predefinita non è una scelta salvata');
@@ -787,9 +788,13 @@ await step('lingua: con un account collegato tutta l\'interfaccia (barra, pannel
   await lpage.locator('.toast', { hasText: 'Saved: ' }).waitFor();
   await lpage.click('#backup');
   text = await lpage.locator('dialog').innerText();
-  assert(/Automatic backups/.test(text) && /Sign out of everything/.test(text) && !ITALIAN_WORDS.test(text), `backup: ${text.slice(0, 300)}`);
+  assert(/Automatic backups/.test(text) && /Export all lists/.test(text) && !/Sign out of everything|Install as an app|Language/.test(text) && !ITALIAN_WORDS.test(text), `backup: ${text.slice(0, 300)}`);
   const date = await lpage.locator('.backup-list small').first().innerText();
   assert(/\d{1,2}\/\d{1,2}\/\d{4}/.test(date) && /\bAM|PM\b/.test(date), `data in formato US: ${date}`);
+  await lpage.keyboard.press('Escape');
+  await lpage.click('#settings');
+  text = await lpage.locator('dialog').innerText();
+  assert(/Language/.test(text) && /Theme/.test(text) && /Install as an app/.test(text) && /Sign out of everything/.test(text) && !/Automatic backups/.test(text) && !ITALIAN_WORDS.test(text), `impostazioni: ${text.slice(0, 400)}`);
   await lpage.keyboard.press('Escape');
   text = await visibleText(lpage);
   assert(!ITALIAN_WORDS.test(text), `parole italiane: ${text.match(ITALIAN_WORDS)?.[0]}`);
@@ -804,18 +809,25 @@ await step('lingua: errori del server e dei controlli (login errato) nella lingu
   await lpage.keyboard.press('Escape');
 });
 
-await step('lingua: il menu della barra passa all\'italiano, ridisegna tutto subito e salva la scelta', async () => {
+await step('lingua: da Impostazioni (ingranaggio) passa all\'italiano, ridisegna tutto subito e salva la scelta', async () => {
   const draft = lpage.locator('section.panel').first();
   await row(draft, 'Addon A').locator('button[aria-label="Move up"]').click(); // una bozza e una selezione da conservare
   await draft.locator('input.sel').first().check();
-  await lpage.click('#lang');
-  const items = await lpage.locator('.menu-item').allInnerTexts();
-  eq(items.map((x) => x.trim()), ['English', 'Italiano']);
-  await lpage.locator('.menu-item:has-text("Italiano")').click();
-  await lpage.locator('.toast', { hasText: 'x' }).count(); // nessun errore atteso
+  await lpage.click('#settings');
+  const dlg = lpage.locator('dialog[open]');
+  eq(await dlg.locator('h2').innerText(), 'Settings');
+  eq((await dlg.locator('h3').allInnerTexts()).map((x) => x.trim()), ['Language', 'Theme', 'Install as an app', 'Data in this browser']);
+  eq((await dlg.locator('[aria-label="Language"] button').allInnerTexts()).map((x) => x.trim()), ['English', 'Italiano']);
+  await dlg.locator('[aria-label="Language"] button:has-text("Italiano")').click();
+  // il dialogo si riapre già in italiano, con la scelta evidenziata
+  await lpage.locator('dialog[open] h2:has-text("Impostazioni")').waitFor();
+  eq((await lpage.locator('dialog[open] h3').allInnerTexts()).map((x) => x.trim()), ['Lingua', 'Tema', 'Installa come app', 'Dati in questo browser']);
+  await lpage.locator('dialog[open] [role=radio][aria-checked=true]', { hasText: 'Italiano' }).waitFor();
+  await lpage.keyboard.press('Escape');
+  await lpage.locator('dialog').waitFor({ state: 'detached' });
   eq(await lpage.evaluate(() => document.documentElement.lang), 'it');
   eq(await lpage.title(), 'Addon Manager — Stremio e Nuvio');
-  eq((await lpage.locator('#lang').innerText()).trim(), 'IT');
+  eq(await lpage.locator('#settings').getAttribute('aria-label'), 'Impostazioni');
   eq(await lpage.evaluate(() => localStorage.getItem('addonmanager.lang')), 'it');
   eq(await lpage.locator('#save-all').getAttribute('title'), 'Salva tutto (1 lista modificata)');
   eq(await lpage.locator('#backup').getAttribute('aria-label'), 'Backup');
@@ -831,20 +843,22 @@ await step('lingua: il menu della barra passa all\'italiano, ridisegna tutto sub
   eq(await lpage.locator('section.panel').first().locator('.row .name').allInnerTexts().then((n) => n.slice(0, 3)), ['Cinemeta', 'Addon A', 'Addon B']);
 });
 
-await step('lingua: la scelta resta dopo il ricaricamento e dopo "Esci da tutto"; si può tornare all\'inglese dal dialogo Backup', async () => {
+await step('lingua: la scelta resta dopo il ricaricamento e dopo "Esci da tutto"; si può tornare all\'inglese da Impostazioni', async () => {
   await lpage.reload();
   await lpage.locator('section.panel .row').first().waitFor().catch(() => {}); // bozza persa al reload, sessione no
-  await lpage.locator('#lang', { hasText: 'IT' }).waitFor();
+  await lpage.locator('#settings[aria-label="Impostazioni"]').waitFor();
   eq(await lpage.evaluate(() => document.documentElement.lang), 'it');
-  await lpage.click('#backup');
+  await lpage.click('#settings');
   await lpage.locator('dialog [role=radio][aria-checked=true]', { hasText: 'Italiano' }).waitFor();
   await lpage.locator('dialog button:has-text("Esci da tutto")').click();
   await lpage.locator('dialog button:has-text("Esci e cancella")').click();
   await lpage.locator('.empty-state').waitFor();
   eq(await lpage.evaluate(() => localStorage.getItem('addonmanager.lang')), 'it', 'la lingua non è un dato personale: resta');
   eq((await lpage.locator('.empty-state h2').innerText()).trim(), 'Gestisci gli addon di tutti i tuoi account');
-  await lpage.click('#backup');
+  await lpage.click('#settings');
   await lpage.locator('dialog [role=radiogroup] button:has-text("English")').click();
+  await lpage.locator('dialog[open] h2:has-text("Settings")').waitFor();
+  await lpage.keyboard.press('Escape');
   await lpage.locator('dialog').waitFor({ state: 'detached' });
   eq((await lpage.locator('.empty-state h2').innerText()).trim(), 'Manage the addons of all your accounts');
   eq(await lpage.evaluate(() => localStorage.getItem('addonmanager.lang')), 'en');
@@ -853,13 +867,15 @@ await step('lingua: la scelta resta dopo il ricaricamento e dopo "Esci da tutto"
   eq(await lpage.evaluate(() => document.documentElement.lang), 'en', 'scelta "inglese" ricordata');
 });
 
-await step('lingua: su telefono il pulsante non c\'è nella barra, ma la lingua si cambia dalla schermata iniziale e da Backup', async () => {
+await step('lingua: su telefono la barra resta in una riga (ingranaggio al posto di tema e lingua); la lingua si cambia da Impostazioni e dalla schermata iniziale', async () => {
   const c = await newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, { lang: null });
   const pg = await c.newPage();
   try {
     await pg.goto(APP);
     await pg.locator('.empty-state').waitFor();
-    assert(!(await pg.locator('#lang').isVisible()), 'il pulsante nella barra non deve occupare spazio sul telefono');
+    const bar = await pg.evaluate(() => { const b = document.querySelector('.topbar-main'); const kids = [...b.querySelectorAll('.brand, .top-actions > *')].map((e) => e.getBoundingClientRect()); return { h: Math.round(b.getBoundingClientRect().height), right: Math.round(Math.max(...kids.map((r) => r.right))), tops: new Set(kids.map((r) => Math.round(r.top / 10))).size }; });
+    assert(bar.h === 54 && bar.right <= 390 - 8 && bar.tops <= 2, `barra in alto affollata: ${JSON.stringify(bar)}`);
+    assert(await pg.locator('#settings').isVisible(), 'l\'ingranaggio deve esserci anche sul telefono');
     eq(await pg.evaluate(() => document.documentElement.scrollWidth - innerWidth), 0, 'nessuno sforamento orizzontale');
     eq((await pg.locator('.empty-state h2').innerText()).trim(), 'Manage the addons of all your accounts');
     await pg.locator('.empty-lang button:has-text("Italiano")').tap();
@@ -867,6 +883,12 @@ await step('lingua: su telefono il pulsante non c\'è nella barra, ma la lingua 
     eq(await pg.evaluate(() => localStorage.getItem('addonmanager.lang')), 'it');
     await pg.locator('.empty-lang button:has-text("English")').tap();
     await pg.locator('.empty-state h2:has-text("Manage")').waitFor();
+    await pg.locator('#settings').tap(); // anche dall'ingranaggio, con il tocco
+    await pg.locator('dialog[open] [aria-label="Language"] button:has-text("Italiano")').tap();
+    await pg.locator('dialog[open] h2:has-text("Impostazioni")').waitFor();
+    await pg.locator('dialog[open] [aria-label="Lingua"] button:has-text("English")').tap();
+    await pg.locator('dialog[open] h2:has-text("Settings")').waitFor();
+    await pg.locator('dialog[open] button:has-text("Close")').last().tap();
     // in inglese, come in italiano: su telefono undo/redo senza cronologia non occupano spazio nell'intestazione
     db = freshDb();
     await addAccount('stremio', 's@x.it', 'pw', { on: pg });
@@ -875,6 +897,38 @@ await step('lingua: su telefono il pulsante non c\'è nella barra, ma la lingua 
     eq(hidden, ['none', 'none']);
     eq(await pg.evaluate(() => document.documentElement.scrollWidth - innerWidth), 0);
   } finally { await c.close(); }
+});
+
+await step('tema: Auto segue il sistema; Chiaro e Scuro lo forzano; la scelta si salva e si ritrova', async () => {
+  const bg = () => lpage.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const theme = () => lpage.evaluate(() => document.documentElement.dataset.theme ?? null);
+  const open = async () => { await lpage.click('#settings'); return lpage.locator('dialog[open]'); };
+  const pick = async (label) => { const d = await open(); await d.locator(`[aria-label="Theme"] [role=radio]:has-text("${label}")`).click(); await lpage.keyboard.press('Escape'); await lpage.locator('dialog').waitFor({ state: 'detached' }); };
+  await lpage.emulateMedia({ colorScheme: 'light' });
+  let d = await open();
+  eq((await d.locator('[aria-label="Theme"] [role=radio]').allInnerTexts()).map((x) => x.trim()), ['Auto', 'Light', 'Dark']);
+  await d.locator('[aria-label="Theme"] [role=radio][aria-checked=true]:has-text("Auto")').waitFor();
+  await lpage.keyboard.press('Escape');
+  await lpage.locator('dialog').waitFor({ state: 'detached' });
+  eq(await theme(), null); const light = await bg();
+  await lpage.emulateMedia({ colorScheme: 'dark' });
+  const darkSystem = await bg();
+  assert(darkSystem !== light, 'Auto deve seguire il sistema scuro');
+  await pick('Light');
+  eq(await theme(), 'light'); eq(await bg(), light, 'Chiaro forzato anche con il sistema scuro');
+  await lpage.emulateMedia({ colorScheme: 'light' });
+  await pick('Dark');
+  eq(await theme(), 'dark'); eq(await bg(), darkSystem, 'Scuro forzato anche con il sistema chiaro');
+  eq(await lpage.evaluate(() => JSON.parse(localStorage.getItem('streamsync.v1')).settings.theme), 'dark');
+  await lpage.reload();
+  await lpage.locator('.empty-state').waitFor();
+  eq(await theme(), 'dark', 'tema ricordato');
+  d = await open();
+  await d.locator('[aria-label="Theme"] [role=radio][aria-checked=true]:has-text("Dark")').waitFor();
+  await d.locator('[aria-label="Theme"] [role=radio]:has-text("Auto")').click();
+  await lpage.keyboard.press('Escape');
+  eq(await theme(), null);
+  await lpage.emulateMedia({ colorScheme: 'light' });
 });
 
 await step('lingua: chiusura dei contesti di prova', async () => { await lctx.close(); });
@@ -957,7 +1011,7 @@ await step('attacco: "Esci da tutto" in una scheda non viene annullato da un\'al
     const b = await ctx.newPage();
     await b.goto(APP);
     await b.locator('section.panel .row').first().waitFor();
-    await a.click('#backup');
+    await a.click('#settings');
     await a.locator('dialog button:has-text("Esci da tutto")').click();
     await a.locator('dialog button:has-text("Esci e cancella")').click();
     await a.locator('.empty-state').waitFor();
@@ -1333,8 +1387,8 @@ await step('installazione: invito con "Installa" (apre l\'installazione vera) e 
   await synthInstallPrompt(pg);
   await pg.waitForTimeout(200);
   assert(await pg.locator('#install-banner').isHidden(), 'l\'invito è tornato dopo "Non ora"');
-  // …ma l'installazione resta raggiungibile dalla finestra Backup
-  await pg.click('#backup');
+  // …ma l'installazione resta raggiungibile da Impostazioni
+  await pg.click('#settings');
   const dlg = pg.locator('dialog[open]');
   await dlg.locator('h3', { hasText: 'Installa come app' }).waitFor();
   await dlg.locator('button:has-text("Installa")').click();
@@ -1351,7 +1405,7 @@ await step('installazione: dopo l\'installazione (evento appinstalled) l\'invito
   await pg.locator('#install-banner').waitFor();
   await pg.evaluate(() => window.dispatchEvent(new Event('appinstalled')));
   await pg.locator('#install-banner').waitFor({ state: 'hidden' });
-  await pg.click('#backup');
+  await pg.click('#settings');
   await pg.locator('dialog[open]').locator('text=Stai usando Addon Manager come app installata').waitFor();
   await pg.close();
 });

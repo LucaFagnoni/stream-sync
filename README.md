@@ -51,7 +51,8 @@ Addon Manager è un'applicazione web statica, senza backend: il browser comunica
 - **Sincronizza da…**: copia in una lista gli addon mancanti di un'altra, oppure rendila identica alla sorgente, con anteprima.
 - Importazione ed esportazione in JSON; backup automatico dello stato remoto prima di ogni salvataggio.
 - **Due lingue**: inglese (US, predefinita) e italiano ([vedi sotto](#lingua)).
-- Tema chiaro e scuro; **installabile come app** su computer e telefono, con l'interfaccia disponibile anche senza connessione.
+- **Impostazioni** (ingranaggio ⚙ nella barra): lingua, tema (automatico, chiaro o scuro), installazione come app e cancellazione dei dati locali, in un solo posto invece che in tanti pulsanti.
+- **Installabile come app** su computer e telefono, con l'interfaccia disponibile anche senza connessione.
 
 ## Guida rapida
 
@@ -64,8 +65,8 @@ Addon Manager è un'applicazione web statica, senza backend: il browser comunica
 
 L'interfaccia è in **inglese (US) alla prima visita**, qualunque sia la lingua del browser, e si può passare all'**italiano**:
 
-- **Computer:** pulsante `EN` / `IT` nella barra in alto.
-- **Telefono:** *Backup → Lingua*, oppure i pulsanti nella schermata iniziale (nella barra non c'è spazio).
+- **Ovunque:** ingranaggio ⚙ nella barra in alto → *Impostazioni → Lingua*.
+- **Schermata iniziale** (senza account): due pulsanti in fondo, per chi apre l'app per la prima volta.
 
 La scelta si ridisegna subito, senza perdere bozze o selezioni, e viene **salvata nel browser** (`localStorage`, chiave `addonmanager.lang`): alla visita successiva l'app si apre nell'ultima lingua scelta. Non è un dato personale, quindi resta anche dopo «Esci da tutto». Anche date e orari seguono la lingua (`en-US` / `it-IT`). Nel resto di questa guida i nomi dei pulsanti sono quelli italiani.
 
@@ -73,7 +74,7 @@ La scelta si ridisegna subito, senza perdere bozze o selezioni, e viene **salvat
 
 Addon Manager si può installare: si apre in una finestra tutta sua, con la propria icona e senza barra del browser. L'interfaccia si carica anche senza connessione (per gestire gli addon serve comunque la rete).
 
-- **Chrome ed Edge (computer e Android):** in cima alla pagina compare l'invito «Installa Addon Manager»; resta disponibile anche in *Backup → Installa come app*. In alternativa c'è l'icona di installazione nella barra degli indirizzi. Il browser la propone solo dopo qualche istante di utilizzo.
+- **Chrome ed Edge (computer e Android):** in cima alla pagina compare l'invito «Installa Addon Manager»; resta disponibile anche in *⚙ Impostazioni → Installa come app*. In alternativa c'è l'icona di installazione nella barra degli indirizzi. Il browser la propone solo dopo qualche istante di utilizzo.
 - **iPhone e iPad (Safari):** Condividi → «Aggiungi alla schermata Home». L'app non può farlo da sola: Safari non lo permette.
 - **Safari su Mac:** File → «Aggiungi al Dock…» (Safari 17 o successivi).
 - **Altri browser:** se supportano le app web, cerca «Installa app» o «Aggiungi alla schermata Home» nel menu.
@@ -113,7 +114,7 @@ Il trascinamento con il dito non è previsto: su touch si usa il menu ⋯.
 - **Credenziali.** La password serve solo a ottenere un token di sessione e non viene mai memorizzata. Il token viene conservato:
   - con «Ricordami» spento (impostazione predefinita) in `sessionStorage`, insieme a email, nome e backup automatici dell'account: chiusa la scheda non resta nulla nel browser;
   - con «Ricordami» attivo in `localStorage`, anche dopo la chiusura del browser.
-- **Revoca.** Il token Stremio non scade da solo. *Backup → «Esci da tutto e cancella i dati locali»* lo invalida sul server e cancella ogni dato salvato nel browser, anche nelle altre schede aperte dell'app (che altrimenti riscriverebbero token ed email). Allo stesso modo un account rimosso in una scheda sparisce dalle altre. La disconnessione da Nuvio usa `scope=local`, così le altre app restano collegate.
+- **Revoca.** Il token Stremio non scade da solo. *⚙ Impostazioni → «Esci da tutto e cancella i dati locali»* lo invalida sul server e cancella ogni dato salvato nel browser, anche nelle altre schede aperte dell'app (che altrimenti riscriverebbero token ed email). Allo stesso modo un account rimosso in una scheda sparisce dalle altre. La disconnessione da Nuvio usa `scope=local`, così le altre app restano collegate.
 - **Isolamento.** L'app è pubblicata su un dominio dedicato, con intestazioni HTTP di sicurezza:
   - Content-Security-Policy restrittiva, con Trusted Types e `frame-ancestors 'none'`;
   - `X-Frame-Options`, `nosniff`, HSTS, `no-referrer`.
@@ -167,7 +168,7 @@ js/store.js                        persistenza locale
 js/i18n.js, locales/it.js          lingue: t(), preferenza salvata, dizionario italiano
 js/install.js                      installazione come app e registrazione del service worker
 js/app.js                          controller: account, caricamento, salvataggio, copia
-js/ui/                             componenti dell'interfaccia
+js/ui/                             componenti dell'interfaccia (viste, dialoghi, impostazioni, tema)
 _headers                           intestazioni HTTP (Cloudflare Pages)
 redirect/                          pagina di reindirizzamento del vecchio indirizzo
 scripts/serve.mjs                  server di sviluppo

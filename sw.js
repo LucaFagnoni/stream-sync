@@ -31,6 +31,7 @@ const SHELL = [
   'js/ui/dialogs.js',
   'js/ui/dom.js',
   'js/ui/install-ui.js',
+  'js/ui/theme.js',
   'js/ui/views.js',
   'img/logo.svg',
   'img/nuvio.png',

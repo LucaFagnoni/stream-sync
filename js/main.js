@@ -1,8 +1,9 @@
 import * as app from './app.js';
-import { t, getLang, setLang, applyStatic, onLangChange, LANGUAGES } from './i18n.js';
-import { h, icon, toast, menu, closeMenu } from './ui/dom.js';
+import { t, applyStatic, onLangChange } from './i18n.js';
+import { h, icon, toast, closeMenu } from './ui/dom.js';
 import { mountBoard, renderBoard, renderPanel, setFilter, updateSaveAll } from './ui/views.js';
-import { openLogin, openBackups, confirmSave, confirmConflict } from './ui/dialogs.js';
+import { openLogin, openBackups, openSettings, confirmSave, confirmConflict } from './ui/dialogs.js';
+import { applyTheme } from './ui/theme.js';
 import { initInstall, registerServiceWorker } from './install.js';
 import { mountInstallBanner } from './ui/install-ui.js';
 
@@ -20,20 +21,6 @@ if (window.top !== window.self) {
 
 applyStatic();
 
-// ---------- tema ----------
-const root = document.documentElement;
-function applyTheme() {
-  const t = app.state.settings.theme;
-  if (t === 'light' || t === 'dark') root.dataset.theme = t; else delete root.dataset.theme;
-  const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-  $('theme').replaceChildren(icon(dark ? 'sun' : 'moon', 18));
-}
-$('theme').addEventListener('click', () => {
-  const dark = root.dataset.theme === 'dark' || (!root.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
-  app.updateSettings({ theme: dark ? 'light' : 'dark' });
-  applyTheme();
-});
-
 // ---------- collegamento controller <-> UI ----------
 mountBoard($('board'), $('accounts'), $('save-all'));
 app.setHooks({ toast, confirmSave, confirmConflict });
@@ -47,29 +34,23 @@ const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
 function renderChrome() {
   $('backup').replaceChildren(icon('download', 16), h('span', { class: 'lbl' }, t('Backup')));
   $('add-account').replaceChildren(icon('plus', 16), h('span', { class: 'lbl' }, t('Account')));
-  $('lang').textContent = getLang().toUpperCase();
+  $('settings').replaceChildren(icon('settings', 18));
   $('search').placeholder = finePointer.matches ? t('Search all lists  ( / )') : t('Search all lists');
 }
 renderChrome();
 finePointer.addEventListener('change', renderChrome);
 
 // ---------- lingua ----------
-// La scelta è salvata (js/i18n.js) e vale anche alla visita successiva; cambiandola si ridisegna tutto.
-$('lang').addEventListener('click', (e) => menu(e.currentTarget, [
-  { heading: t('Language') },
-  ...Object.entries(LANGUAGES).map(([code, l]) => ({
-    label: l.name, icon: code === getLang() ? 'check' : null, onClick: () => setLang(code),
-  })),
-]));
+// La scelta (Impostazioni) è salvata da js/i18n.js e vale anche alla visita successiva; cambiandola si ridisegna tutto.
 onLangChange(() => {
   closeMenu();
   renderChrome();
-  applyTheme();
   app.notifyBoard();
 });
 
 $('add-account').addEventListener('click', () => openLogin());
 $('backup').addEventListener('click', () => openBackups());
+$('settings').addEventListener('click', () => openSettings());
 $('save-all').addEventListener('click', async () => {
   const n = await app.saveAll();
   if (n > 1) toast(t('{n} lists saved.', { n }), 'ok');
@@ -112,8 +93,6 @@ document.addEventListener('drop', (e) => { if (!e.defaultPrevented) e.preventDef
 addEventListener('beforeunload', (e) => {
   if (app.dirtyPanels().length) { e.preventDefault(); e.returnValue = ''; }
 });
-
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
 
 // ---------- installazione come app + uso senza rete ----------
 initInstall();
