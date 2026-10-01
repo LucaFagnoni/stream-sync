@@ -116,8 +116,11 @@ const browser = await chromium.launch();
 // Il service worker e l'evento REALE `beforeinstallprompt` renderebbero i test non deterministici (un invito che
 // compare a metà test sposta i layout; un service worker intercetta le richieste che i mock devono vedere):
 // nei test "generali" si bloccano. I test sull'installazione usano contesti dedicati.
-const newContext = async (opts = {}, { sw = false, installPrompt = false } = {}) => {
+// L'app parte in inglese (US). I test generali girano in italiano (scelta salvata come farebbe un utente):
+// le sezioni sulla lingua usano `lang: null` per vedere il comportamento reale della prima visita.
+const newContext = async (opts = {}, { sw = false, installPrompt = false, lang = 'it' } = {}) => {
   const ctx = await browser.newContext({ serviceWorkers: sw ? 'allow' : 'block', ...opts });
+  if (lang) await ctx.addInitScript((l) => { try { if (localStorage.getItem('addonmanager.lang') === null) localStorage.setItem('addonmanager.lang', l); } catch { /* ignorato */ } }, lang);
   if (!installPrompt) {
     await ctx.addInitScript(() => addEventListener('beforeinstallprompt', (e) => { if (!e.__synthetic) e.stopImmediatePropagation(); }, true));
   }
@@ -735,6 +738,147 @@ await step('"Ricordami" spento: account e token solo in sessionStorage, sopravvi
   await ctx.close();
 });
 
+// ---------- lingua ----------
+// Parole italiane che in una pagina inglese non devono comparire (i nomi propri e i dati dell'utente non sono nell'elenco).
+const ITALIAN_WORDS = /\b(?:salva|salvato|salvataggio|aggiungi|aggiungere|rimuovi|annulla|ricarica|account collegati|errore|riprova|accedi|accesso|addon di|nessun|caricamento|connessione|sposta|copia|copiati|bozza|modifiche|lista|liste|cerca|tutte|tutti|non|della|delle|degli|nel|nella|vengono|viene|esci|cancella|installa|ricordami|lingua|trascina|tocca|premi|importa|esporta|sincronizza|verifica|aggiorna|disattiva|attiva|protetto|nuovo|manifest aggiornato)\b/i;
+const visibleText = (pg) => pg.evaluate(() => [document.body.innerText, ...[...document.querySelectorAll('[title],[aria-label],[placeholder]')].map((e) => `${e.title} ${e.getAttribute('aria-label')} ${e.getAttribute('placeholder') ?? ''}`)].join('\n'));
+
+let lctx; let lpage;
+await step('lingua: alla prima visita l\'app è in inglese (US), qualunque sia la lingua del browser', async () => {
+  db = freshDb();
+  lctx = await newContext({ viewport: { width: 1300, height: 800 }, locale: 'it-IT' }, { lang: null });
+  lpage = await lctx.newPage();
+  lpage.on('pageerror', (e) => errors.push(`pageerror(lingua): ${e.message}`));
+  await lpage.goto(APP);
+  await lpage.locator('.empty-state').waitFor();
+  eq(await lpage.evaluate(() => document.documentElement.lang), 'en');
+  eq(await lpage.title(), 'Addon Manager — Stremio and Nuvio');
+  eq((await lpage.locator('.empty-state h2').innerText()).trim(), 'Manage the addons of all your accounts');
+  eq(await lpage.locator('#search').getAttribute('placeholder'), 'Search all lists  ( / )');
+  eq((await lpage.locator('#lang').innerText()).trim(), 'EN');
+  const text = await visibleText(lpage);
+  assert(!ITALIAN_WORDS.test(text), `parole italiane in una pagina inglese: ${text.match(ITALIAN_WORDS)?.[0]}`);
+  eq(await lpage.evaluate(() => localStorage.getItem('addonmanager.lang')), null, 'la lingua predefinita non è una scelta salvata');
+});
+
+await step('lingua: con un account collegato tutta l\'interfaccia (barra, pannelli, menu, dialoghi) è in inglese', async () => {
+  await addAccount('stremio', 's@x.it', 'pw', { on: lpage });
+  await lpage.locator('section.panel .row').first().waitFor();
+  await addAccount('nuvio', 'n@x.it', 'pw', { on: lpage });
+  await lpage.locator('section.panel[aria-label="Nuvio Kids"]').waitFor();
+  const p = lpage.locator('section.panel').first();
+  await row(p, 'Addon B').locator('button[aria-label="Move up"]').click();
+  await p.locator('input.sel').first().check();
+  await lpage.locator('.selbar').waitFor();
+  let text = await visibleText(lpage);
+  assert(text.includes('Save all (1)') && text.includes('Selection actions') && /Cinemeta[\s\S]*Protected/.test(text), 'testi inglesi attesi nella barra e nelle righe');
+  await row(p, 'Addon A').locator('button[aria-label="More actions"]').click();
+  text = await lpage.locator('.menu').innerText();
+  assert(/Copy manifest URL/.test(text) && /Remove/.test(text) && !ITALIAN_WORDS.test(text), `menu: ${text}`);
+  await lpage.keyboard.press('Escape');
+  await p.locator('button[aria-label="Panel menu"]').click();
+  text = await lpage.locator('.menu').innerText();
+  assert(/Add from URL…/.test(text) && /Sync from another panel…/.test(text) && !ITALIAN_WORDS.test(text), `menu pannello: ${text}`);
+  await lpage.locator('.menu-item:has-text("Add from URL")').click();
+  text = await lpage.locator('dialog').innerText();
+  assert(/Add addons to/.test(text) && /Verify/.test(text) && !ITALIAN_WORDS.test(text), `dialogo: ${text}`);
+  await lpage.keyboard.press('Escape');
+  await p.locator('button:has-text("Save")').first().click();
+  await lpage.locator('.toast', { hasText: 'Saved: ' }).waitFor();
+  await lpage.click('#backup');
+  text = await lpage.locator('dialog').innerText();
+  assert(/Automatic backups/.test(text) && /Sign out of everything/.test(text) && !ITALIAN_WORDS.test(text), `backup: ${text.slice(0, 300)}`);
+  const date = await lpage.locator('.backup-list small').first().innerText();
+  assert(/\d{1,2}\/\d{1,2}\/\d{4}/.test(date) && /\bAM|PM\b/.test(date), `data in formato US: ${date}`);
+  await lpage.keyboard.press('Escape');
+  text = await visibleText(lpage);
+  assert(!ITALIAN_WORDS.test(text), `parole italiane: ${text.match(ITALIAN_WORDS)?.[0]}`);
+});
+
+await step('lingua: errori del server e dei controlli (login errato) nella lingua scelta', async () => {
+  await lpage.click('#add-account');
+  await lpage.fill('dialog input[type=email]', 'x@x.it');
+  await lpage.fill('dialog input[type=password]', 'sbagliata');
+  await lpage.click('dialog button[type=submit]');
+  await lpage.locator('dialog .form-error', { hasText: 'Account not found.' }).waitFor();
+  await lpage.keyboard.press('Escape');
+});
+
+await step('lingua: il menu della barra passa all\'italiano, ridisegna tutto subito e salva la scelta', async () => {
+  const draft = lpage.locator('section.panel').first();
+  await row(draft, 'Addon A').locator('button[aria-label="Move up"]').click(); // una bozza e una selezione da conservare
+  await draft.locator('input.sel').first().check();
+  await lpage.click('#lang');
+  const items = await lpage.locator('.menu-item').allInnerTexts();
+  eq(items.map((x) => x.trim()), ['English', 'Italiano']);
+  await lpage.locator('.menu-item:has-text("Italiano")').click();
+  await lpage.locator('.toast', { hasText: 'x' }).count(); // nessun errore atteso
+  eq(await lpage.evaluate(() => document.documentElement.lang), 'it');
+  eq(await lpage.title(), 'Addon Manager — Stremio e Nuvio');
+  eq((await lpage.locator('#lang').innerText()).trim(), 'IT');
+  eq(await lpage.evaluate(() => localStorage.getItem('addonmanager.lang')), 'it');
+  eq(await lpage.locator('#save-all').getAttribute('title'), 'Salva tutto (1 lista modificata)');
+  eq(await lpage.locator('#backup').getAttribute('aria-label'), 'Backup');
+  eq(await lpage.locator('#add-account').getAttribute('title'), 'Aggiungi account');
+  eq(await lpage.locator('#search').getAttribute('placeholder'), 'Cerca in tutte le liste  ( / )');
+  eq(await lpage.locator('#accounts').getAttribute('aria-label'), 'Account collegati');
+  const p = lpage.locator('section.panel').first();
+  assert(await p.locator('button:has-text("Salva")').first().isVisible(), 'il pannello deve essere in italiano senza ricaricare');
+  assert(await lpage.locator('section.panel button[aria-label="Sposta su"]').first().count() > 0, 'azioni di riga in italiano');
+  assert((await lpage.locator('.chip-acc').first().getAttribute('title')).includes('connesso'), 'stato account in italiano');
+  // bozza e selezione non si perdono cambiando lingua
+  assert(await lpage.locator('.selbar').isVisible(), 'la selezione resta');
+  eq(await lpage.locator('section.panel').first().locator('.row .name').allInnerTexts().then((n) => n.slice(0, 3)), ['Cinemeta', 'Addon A', 'Addon B']);
+});
+
+await step('lingua: la scelta resta dopo il ricaricamento e dopo "Esci da tutto"; si può tornare all\'inglese dal dialogo Backup', async () => {
+  await lpage.reload();
+  await lpage.locator('section.panel .row').first().waitFor().catch(() => {}); // bozza persa al reload, sessione no
+  await lpage.locator('#lang', { hasText: 'IT' }).waitFor();
+  eq(await lpage.evaluate(() => document.documentElement.lang), 'it');
+  await lpage.click('#backup');
+  await lpage.locator('dialog [role=radio][aria-checked=true]', { hasText: 'Italiano' }).waitFor();
+  await lpage.locator('dialog button:has-text("Esci da tutto")').click();
+  await lpage.locator('dialog button:has-text("Esci e cancella")').click();
+  await lpage.locator('.empty-state').waitFor();
+  eq(await lpage.evaluate(() => localStorage.getItem('addonmanager.lang')), 'it', 'la lingua non è un dato personale: resta');
+  eq((await lpage.locator('.empty-state h2').innerText()).trim(), 'Gestisci gli addon di tutti i tuoi account');
+  await lpage.click('#backup');
+  await lpage.locator('dialog [role=radiogroup] button:has-text("English")').click();
+  await lpage.locator('dialog').waitFor({ state: 'detached' });
+  eq((await lpage.locator('.empty-state h2').innerText()).trim(), 'Manage the addons of all your accounts');
+  eq(await lpage.evaluate(() => localStorage.getItem('addonmanager.lang')), 'en');
+  await lpage.reload();
+  await lpage.locator('.empty-state').waitFor();
+  eq(await lpage.evaluate(() => document.documentElement.lang), 'en', 'scelta "inglese" ricordata');
+});
+
+await step('lingua: su telefono il pulsante non c\'è nella barra, ma la lingua si cambia dalla schermata iniziale e da Backup', async () => {
+  const c = await newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, { lang: null });
+  const pg = await c.newPage();
+  try {
+    await pg.goto(APP);
+    await pg.locator('.empty-state').waitFor();
+    assert(!(await pg.locator('#lang').isVisible()), 'il pulsante nella barra non deve occupare spazio sul telefono');
+    eq(await pg.evaluate(() => document.documentElement.scrollWidth - innerWidth), 0, 'nessuno sforamento orizzontale');
+    eq((await pg.locator('.empty-state h2').innerText()).trim(), 'Manage the addons of all your accounts');
+    await pg.locator('.empty-lang button:has-text("Italiano")').tap();
+    await pg.locator('.empty-state h2:has-text("Gestisci")').waitFor();
+    eq(await pg.evaluate(() => localStorage.getItem('addonmanager.lang')), 'it');
+    await pg.locator('.empty-lang button:has-text("English")').tap();
+    await pg.locator('.empty-state h2:has-text("Manage")').waitFor();
+    // in inglese, come in italiano: su telefono undo/redo senza cronologia non occupano spazio nell'intestazione
+    db = freshDb();
+    await addAccount('stremio', 's@x.it', 'pw', { on: pg });
+    await pg.locator('section.panel .row').first().waitFor();
+    const hidden = await pg.evaluate(() => ['undo', 'redo'].map((a) => getComputedStyle(document.querySelector(`.phead [data-act="${a}"]`)).display));
+    eq(hidden, ['none', 'none']);
+    eq(await pg.evaluate(() => document.documentElement.scrollWidth - innerWidth), 0);
+  } finally { await c.close(); }
+});
+
+await step('lingua: chiusura dei contesti di prova', async () => { await lctx.close(); });
+
 // ---------- attacchi simulati ----------
 const SECRET = 'realdebrid=SEGRETO123';
 const evilAddons = () => [
@@ -996,7 +1140,7 @@ await step('telefono in orizzontale: layout a colonna con scorrimento di pagina;
   try {
     const measure = () => mpage.evaluate(() => {
       const L = (sel) => document.querySelector(sel).getBoundingClientRect();
-      const all = [...document.querySelectorAll('.topbar-main > *, .top-actions > *, #search, .chip-wrap, section.panel')].map((e) => e.getBoundingClientRect());
+      const all = [...document.querySelectorAll('.topbar-main > *, .top-actions > *, #search, .chip-wrap, section.panel')].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0); // il pulsante lingua è nascosto su telefono
       return {
         scrollW: document.documentElement.scrollWidth, innerW: innerWidth,
         left: Math.round(Math.min(...all.map((r) => r.left))), right: Math.round(Math.max(...all.map((r) => r.right))),

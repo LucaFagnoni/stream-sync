@@ -1,5 +1,7 @@
 // Helper DOM: nessun innerHTML (manifest e nomi addon sono dati non fidati).
 
+import { t } from '../i18n.js';
+
 export function h(tag, props, ...children) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(props || {})) {
@@ -159,14 +161,14 @@ export function dialog(build, { wide = false, label = '' } = {}) {
 }
 
 export const dialogHeader = (title, close) =>
-  h('div', { class: 'dialog-head' }, h('h2', null, title), iconButton('x', 'Chiudi', () => close(undefined)));
+  h('div', { class: 'dialog-head' }, h('h2', null, title), iconButton('x', t('Close'), () => close(undefined)));
 
 /**
  * Dialog di conferma. Nei dialog distruttivi (`danger`) il focus iniziale va sull'azione SICURA:
  * un Invio premuto per abitudine non deve cancellare o sovrascrivere nulla.
  * extra: [{ label, value, danger? }] pulsanti aggiuntivi; `focus`: 'confirm' | 'cancel'.
  */
-export function confirmDialog({ title, body, confirm = 'Conferma', cancel = 'Annulla', danger = false, extra = [], focus }) {
+export function confirmDialog({ title, body, confirm = t('Confirm'), cancel = t('Cancel'), danger = false, extra = [], focus }) {
   const focusConfirm = focus ? focus === 'confirm' : !danger;
   return dialog((close) => h('div', { class: 'dialog-body' },
     dialogHeader(title, close),

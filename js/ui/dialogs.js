@@ -5,6 +5,7 @@ import { buildExport, parseImport } from '../backup.js';
 import { listBackups } from '../store.js';
 import { installSection } from './install-ui.js';
 import { extractUrls, idOf, hostOf, str, shownName } from '../util.js';
+import { t, getLang, setLang, locale, LANGUAGES } from '../i18n.js';
 
 const field = (label, input, hint) =>
   h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), input, hint ? h('span', { class: 'field-hint' }, hint) : null);
@@ -13,21 +14,21 @@ const field = (label, input, hint) =>
 export function openLogin({ account } = {}) {
   return dialog((close) => {
     let kind = account?.kind || 'stremio';
-    const email = h('input', { type: 'email', required: true, autocomplete: 'username', value: account?.email || '', readonly: !!account, placeholder: 'email@esempio.it' });
-    const pass = h('input', { type: 'password', required: true, autocomplete: 'current-password', placeholder: 'Password' });
-    const label = h('input', { type: 'text', placeholder: 'Facoltativo, es. "Casa" o "Famiglia"', maxlength: 40 });
+    const email = h('input', { type: 'email', required: true, autocomplete: 'username', value: account?.email || '', readonly: !!account, placeholder: t('email@example.com') });
+    const pass = h('input', { type: 'password', required: true, autocomplete: 'current-password', placeholder: t('Password') });
+    const label = h('input', { type: 'text', placeholder: t('Optional, e.g. "Home" or "Family"'), maxlength: 40 });
     const remember = h('input', { type: 'checkbox', checked: account ? account.remember : false });
     const err = h('div', { class: 'form-error', role: 'alert' });
-    const submit = h('button', { type: 'submit', class: 'btn primary' }, account ? 'Accedi di nuovo' : 'Accedi e aggiungi');
+    const submit = h('button', { type: 'submit', class: 'btn primary' }, account ? t('Sign in again') : t('Sign in and add'));
 
-    const kinds = h('div', { class: 'kind-picker', role: 'radiogroup', 'aria-label': 'Servizio' });
+    const kinds = h('div', { class: 'kind-picker', role: 'radiogroup', 'aria-label': t('Service') });
     const renderKinds = () => {
       kinds.replaceChildren(...['stremio', 'nuvio'].map((k) => h('button', {
         type: 'button', role: 'radio', 'aria-checked': String(kind === k), class: `kind-card ${k}${kind === k ? ' on' : ''}`,
         disabled: !!account && account.kind !== k,
         onClick: () => { kind = k; renderKinds(); },
       }, h('span', { class: 'kind-card-title' }, kindLogo(k, 22), h('strong', null, k === 'stremio' ? 'Stremio' : 'Nuvio')),
-      h('small', null, k === 'stremio' ? 'Account email/password' : 'Account con profili (1–6)'))));
+      h('small', null, k === 'stremio' ? t('Email/password account') : t('Account with profiles (1–6)')))));
     };
     renderKinds();
 
@@ -37,7 +38,7 @@ export function openLogin({ account } = {}) {
         e.preventDefault();
         err.textContent = '';
         submit.disabled = true;
-        submit.textContent = 'Accesso in corso…';
+        submit.textContent = t('Signing in…');
         try {
           if (account) await app.reauth(account, pass.value, remember.checked);
           else await app.addAccount({ kind, email: email.value, password: pass.value, label: label.value, remember: remember.checked });
@@ -45,65 +46,65 @@ export function openLogin({ account } = {}) {
         } catch (ex) {
           err.textContent = app.explain(ex);
           submit.disabled = false;
-          submit.textContent = account ? 'Accedi di nuovo' : 'Accedi e aggiungi';
+          submit.textContent = account ? t('Sign in again') : t('Sign in and add');
         }
       },
     },
     account ? null : kinds,
-    field('Email', email),
-    field('Password', pass, 'Non viene mai salvata: serve solo a ottenere un token di sessione.'),
-    account ? null : field('Nome', label),
-    h('label', { class: 'check' }, remember, h('span', null, 'Ricordami su questo browser ',
-      h('small', null, 'Salva il token di sessione in modo permanente. È leggibile da chi usa questo browser e da ogni altra pagina dello stesso dominio: attivalo solo su un dispositivo tuo. Se spento, chiusa la scheda non resta nulla in questo browser (né token, né email, né backup).'))),
+    field(t('Email'), email),
+    field(t('Password'), pass, t('It is never saved: it is only used to obtain a session token.')),
+    account ? null : field(t('Name'), label),
+    h('label', { class: 'check' }, remember, h('span', null, t('Remember me on this browser'), ' ',
+      h('small', null, t('Saves the session token permanently. It can be read by anyone using this browser and by any other page on the same domain: turn it on only on a device of your own. If off, once the tab is closed nothing is left in this browser (no token, email or backup).')))),
     err,
     h('div', { class: 'dialog-actions' },
-      h('button', { type: 'button', class: 'btn', onClick: () => close(false) }, 'Annulla'), submit));
+      h('button', { type: 'button', class: 'btn', onClick: () => close(false) }, t('Cancel')), submit));
 
-    return h('div', { class: 'dialog-body' }, dialogHeader(account ? `Riaccedi a ${account.label}` : 'Aggiungi account', close), form);
-  }, { label: 'Accesso' });
+    return h('div', { class: 'dialog-body' }, dialogHeader(account ? t('Sign in again to {name}', { name: account.label }) : t('Add account'), close), form);
+  }, { label: t('Sign-in') });
 }
 
-export function promptDialog({ title, value = '', label = 'Nome', confirm = 'Salva' }) {
+export function promptDialog({ title, value = '', label = t('Name'), confirm = t('Save') }) {
   return dialog((close) => {
     const input = h('input', { type: 'text', value, maxlength: 40, autofocus: true });
     return h('form', { class: 'dialog-body', onSubmit: (e) => { e.preventDefault(); close(input.value); } },
       dialogHeader(title, close),
       h('div', { class: 'dialog-content form' }, field(label, input)),
       h('div', { class: 'dialog-actions' },
-        h('button', { type: 'button', class: 'btn', onClick: () => close(undefined) }, 'Annulla'),
+        h('button', { type: 'button', class: 'btn', onClick: () => close(undefined) }, t('Cancel')),
         h('button', { type: 'submit', class: 'btn primary' }, confirm)));
   }, { label: title });
 }
 
 // ---------- installa da URL ----------
-const STATUS = {
-  ok: ['ok', 'Manifest valido'],
-  unverified: ['warn', 'Non verificabile dal browser: verrà aggiunto solo l\'URL'],
-  duplicate: ['muted', 'Già presente'],
-  error: ['bad', 'Non aggiungibile'],
-};
+const status = (s) => ({
+  ok: ['ok', t('Valid manifest')],
+  unverified: ['warn', t('Cannot be verified by the browser: only the URL will be added')],
+  duplicate: ['muted', t('Already present')],
+  error: ['bad', t('Cannot be added')],
+})[s];
 
 export function openInstall(panel, { prefill = [] } = {}) {
   return dialog((close) => {
     const meta = new Map(prefill.map((p) => [idOf(p.url), p]));
-    const area = h('textarea', { rows: 6, spellcheck: 'false', placeholder: 'Incolla uno o più URL manifest (anche stremio://), uno per riga', autofocus: true });
+    const area = h('textarea', { rows: 6, spellcheck: 'false', placeholder: t('Paste one or more manifest URLs (stremio:// too), one per line'), autofocus: true });
     area.value = prefill.map((p) => p.url).join('\n');
     const list = h('ul', { class: 'probe-list' });
-    const addBtn = h('button', { type: 'button', class: 'btn primary', disabled: true }, 'Aggiungi');
-    const verifyBtn = h('button', { type: 'button', class: 'btn' }, 'Verifica');
+    const addBtn = h('button', { type: 'button', class: 'btn primary', disabled: true }, t('Add'));
+    const verifyBtn = h('button', { type: 'button', class: 'btn' }, t('Verify'));
     let results = [];
     const picks = new Set();
 
     const refreshAdd = () => {
       addBtn.disabled = picks.size === 0;
-      addBtn.textContent = picks.size ? `Aggiungi ${picks.size} addon` : 'Aggiungi';
+      addBtn.textContent = picks.size ? t('Add {n} addons', { n: picks.size }) : t('Add');
     };
     const renderList = () => {
       list.replaceChildren(...results.map((r, n) => {
         const selectable = r.status === 'ok' || r.status === 'unverified';
-        const [cls, text] = STATUS[r.status];
+        const [cls, text] = status(r.status);
         return h('li', { class: `probe ${cls}` },
-          h('input', { type: 'checkbox', disabled: !selectable, checked: picks.has(n), 'aria-label': 'Includi',
+          h('input', { type: 'checkbox', disabled: !selectable, checked: picks.has(n), 'aria-label': t('Include'),
             onChange: (e) => { if (e.target.checked) picks.add(n); else picks.delete(n); refreshAdd(); } }),
           h('div', null,
             h('strong', null, r.manifest?.name || hostOf(r.url)),
@@ -114,41 +115,41 @@ export function openInstall(panel, { prefill = [] } = {}) {
 
     verifyBtn.addEventListener('click', async () => {
       const urls = extractUrls(area.value);
-      if (!urls.length) { toast('Nessun URL valido trovato.', 'error'); return; }
+      if (!urls.length) { toast(t('No valid URL found.'), 'error'); return; }
       verifyBtn.disabled = true;
-      verifyBtn.textContent = `Verifica di ${urls.length}…`;
+      verifyBtn.textContent = t('Verifying {n}…', { n: urls.length });
       picks.clear();
       results = await app.probeUrls(urls, panel.kind, new Set(panel.items.map((i) => idOf(i.url))));
       results.forEach((r, n) => { if (r.status === 'ok' || r.status === 'unverified') picks.add(n); });
       renderList();
       refreshAdd();
       verifyBtn.disabled = false;
-      verifyBtn.textContent = 'Verifica di nuovo';
+      verifyBtn.textContent = t('Verify again');
     });
 
     addBtn.addEventListener('click', () => {
-      if (panel.status !== 'ready') { toast('Il pannello è in caricamento o salvataggio: riprova tra un attimo.', 'error'); return; }
+      if (panel.status !== 'ready') { toast(t('The panel is loading or saving: try again in a moment.'), 'error'); return; }
       const items = [...picks].sort((a, b) => a - b).map((n) => {
         const it = app.itemFromProbe(results[n], panel.kind);
         const m = meta.get(idOf(it.url));
         return m && m.enabled === false ? { ...it, enabled: false } : it;
       });
       const fresh = items.filter((i) => !panel.has(i.url));
-      if (!panel.insert(fresh)) { toast('Impossibile aggiungere adesso: riprova.', 'error'); return; }
+      if (!panel.insert(fresh)) { toast(t('Cannot add right now: try again.'), 'error'); return; }
       app.notifyPanel(panel);
-      toast(`${fresh.length} addon aggiunti alla bozza di «${panel.title}». Ricorda di salvare.`, 'ok');
+      toast(t('{n} addons added to the draft of “{title}”. Remember to save.', { n: fresh.length, title: panel.title }), 'ok');
       close(true);
     });
 
     return h('div', { class: 'dialog-body' },
-      dialogHeader(`Aggiungi addon a ${panel.title}`, close),
+      dialogHeader(t('Add addons to {title}', { title: panel.title }), close),
       h('div', { class: 'dialog-content' },
         area,
-        panel.kind === 'stremio' ? h('p', { class: 'field-hint' }, 'Stremio richiede il manifest completo: gli addon che il browser non riesce a scaricare non possono essere aggiunti.') : null,
+        panel.kind === 'stremio' ? h('p', { class: 'field-hint' }, t('Stremio requires the full manifest: addons the browser cannot download cannot be added.')) : null,
         h('div', { class: 'row-actions' }, verifyBtn),
         list),
-      h('div', { class: 'dialog-actions' }, h('button', { type: 'button', class: 'btn', onClick: () => close(false) }, 'Chiudi'), addBtn));
-  }, { wide: true, label: 'Aggiungi addon' });
+      h('div', { class: 'dialog-actions' }, h('button', { type: 'button', class: 'btn', onClick: () => close(false) }, t('Close')), addBtn));
+  }, { wide: true, label: t('Add addons') });
 }
 
 // ---------- importa ----------
@@ -157,18 +158,18 @@ export function openImport(panel) {
   input.addEventListener('change', async () => {
     const file = input.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { toast('File troppo grande.', 'error'); return; }
+    if (file.size > 5 * 1024 * 1024) { toast(t('File too large.'), 'error'); return; }
     const lists = parseImport(await file.text());
-    if (!lists.length) { toast('Nessun addon trovato nel file.', 'error'); return; }
+    if (!lists.length) { toast(t('No addons found in the file.'), 'error'); return; }
     let pick = lists[0];
     if (lists.length > 1) {
       const idx = await dialog((close) => {
         const sel = h('select', null, ...lists.map((l, n) => h('option', { value: n }, `${l.title} (${l.items.length})`)));
-        return h('div', { class: 'dialog-body' }, dialogHeader('Quale lista importare?', close),
-          h('div', { class: 'dialog-content form' }, field('Lista', sel)),
+        return h('div', { class: 'dialog-body' }, dialogHeader(t('Which list to import?'), close),
+          h('div', { class: 'dialog-content form' }, field(t('List'), sel)),
           h('div', { class: 'dialog-actions' },
-            h('button', { type: 'button', class: 'btn', onClick: () => close(undefined) }, 'Annulla'),
-            h('button', { type: 'button', class: 'btn primary', onClick: () => close(Number(sel.value)) }, 'Continua')));
+            h('button', { type: 'button', class: 'btn', onClick: () => close(undefined) }, t('Cancel')),
+            h('button', { type: 'button', class: 'btn primary', onClick: () => close(Number(sel.value)) }, t('Continue'))));
       });
       if (idx === undefined) return;
       pick = lists[idx];
@@ -181,54 +182,54 @@ export function openImport(panel) {
 export function exportPanels(panels, filename) {
   const data = buildExport(panels.map((p) => ({ title: p.title, account: app.accountOf(p)?.label, kind: p.kind, items: p.items })));
   downloadFile(filename, JSON.stringify(data, null, 2));
-  toast('Backup scaricato. Gli URL possono contenere chiavi personali: conservalo con cura.', 'info', 7000);
+  toast(t('Backup downloaded. URLs may contain personal keys: keep it safe.'), 'info', 7000);
 }
 
 // ---------- sincronizza da... ----------
 export function openMirror(dst) {
   const sources = app.panelList().filter((p) => p !== dst && p.status === 'ready' && !p.readOnly);
-  if (!sources.length) { toast('Serve almeno un altro pannello caricato come sorgente.', 'error'); return; }
+  if (!sources.length) { toast(t('You need at least one other loaded panel as a source.'), 'error'); return; }
   return dialog((close) => {
     const sel = h('select', null, ...sources.map((p, n) => h('option', { value: n }, app.panelLabel(p))));
     let mode = 'merge';
     const preview = h('div', { class: 'mirror-preview' });
-    const apply = h('button', { type: 'button', class: 'btn primary' }, 'Applica alla bozza');
+    const apply = h('button', { type: 'button', class: 'btn primary' }, t('Apply to draft'));
     const src = () => sources[Number(sel.value)];
 
     const render = () => {
       const plan = planMirror(dst.items, src().items, mode);
       const names = (list) => list.slice(0, 6).map(shownName).join(', ') + (list.length > 6 ? `, … (+${list.length - 6})` : '');
       fill(preview,
-        h('p', null, h('strong', null, `${plan.add.length}`), ' da aggiungere', plan.add.length ? `: ${names(plan.add)}` : ''),
-        mode === 'mirror' ? h('p', { class: plan.remove.length ? 'warn-text' : '' }, h('strong', null, `${plan.remove.length}`), ' da rimuovere', plan.remove.length ? `: ${names(plan.remove)}` : '') : null,
-        mode === 'mirror' ? h('p', { class: 'field-hint' }, 'L\'ordine diventerà quello della sorgente. Gli addon protetti restano.') : null);
+        h('p', null, h('strong', null, `${plan.add.length}`), ' ', t('to add'), plan.add.length ? `: ${names(plan.add)}` : ''),
+        mode === 'mirror' ? h('p', { class: plan.remove.length ? 'warn-text' : '' }, h('strong', null, `${plan.remove.length}`), ' ', t('to remove'), plan.remove.length ? `: ${names(plan.remove)}` : '') : null,
+        mode === 'mirror' ? h('p', { class: 'field-hint' }, t('The order will become that of the source. Protected addons stay.')) : null);
       apply.disabled = mode === 'merge' && !plan.add.length;
     };
 
     const radios = h('div', { class: 'radio-col' },
-      ...[['merge', 'Aggiungi solo i mancanti', 'Non tocca né rimuove nulla di ciò che c\'è già.'],
-        ['mirror', 'Specchio esatto', 'Rende questa lista identica alla sorgente (stesso ordine, extra rimossi).']].map(([v, t, d]) =>
+      ...[['merge', t('Add only the missing ones'), t('Does not touch or remove anything that is already there.')],
+        ['mirror', t('Exact mirror'), t('Makes this list identical to the source (same order, extras removed).')]].map(([v, title, desc]) =>
         h('label', { class: 'radio' }, h('input', { type: 'radio', name: 'mode', value: v, checked: v === mode, onChange: () => { mode = v; render(); } }),
-          h('span', null, h('strong', null, t), h('small', null, d)))));
+          h('span', null, h('strong', null, title), h('small', null, desc)))));
     sel.addEventListener('change', render);
 
     apply.addEventListener('click', async () => {
       apply.disabled = true;
-      apply.textContent = 'Preparazione…';
+      apply.textContent = t('Preparing…');
       const r = await app.mirrorInto(dst, src(), mode);
-      if (r.locked) { toast('Il pannello è in salvataggio: riprova tra un attimo.', 'error'); close(false); return; }
-      const parts = [`${r.added} aggiunti`, mode === 'mirror' ? `${r.removed} rimossi` : null].filter(Boolean);
-      toast(`Bozza aggiornata (${parts.join(', ')}). Ricorda di salvare.`, r.failed.length ? 'info' : 'ok');
-      if (r.failed.length) toast(`Non copiati: ${r.failed.map((f) => `${f.name} (${f.error})`).join('; ')}`, 'error');
+      if (r.locked) { toast(t('The panel is being saved: try again in a moment.'), 'error'); close(false); return; }
+      const parts = [t('{n} added', { n: r.added }), mode === 'mirror' ? t('{n} removed', { n: r.removed }) : null].filter(Boolean);
+      toast(t('Draft updated ({details}). Remember to save.', { details: parts.join(', ') }), r.failed.length ? 'info' : 'ok');
+      if (r.failed.length) toast(t('Not copied: {list}', { list: r.failed.map((f) => `${f.name} (${f.error})`).join('; ') }), 'error');
       close(true);
     });
     render();
 
     return h('div', { class: 'dialog-body' },
-      dialogHeader(`Sincronizza «${dst.title}»`, close),
-      h('div', { class: 'dialog-content form' }, field('Copia da', sel), radios, preview),
-      h('div', { class: 'dialog-actions' }, h('button', { type: 'button', class: 'btn', onClick: () => close(false) }, 'Annulla'), apply));
-  }, { label: 'Sincronizza' });
+      dialogHeader(t('Sync “{title}”', { title: dst.title }), close),
+      h('div', { class: 'dialog-content form' }, field(t('Copy from'), sel), radios, preview),
+      h('div', { class: 'dialog-actions' }, h('button', { type: 'button', class: 'btn', onClick: () => close(false) }, t('Cancel')), apply));
+  }, { label: t('Sync') });
 }
 
 // ---------- backup ----------
@@ -236,71 +237,83 @@ export function openBackups() {
   return dialog((close) => {
     const ready = app.panelList().filter((p) => p.status === 'ready' && !p.readOnly);
     const auto = listBackups();
-    const fmt = (ts) => new Date(ts).toLocaleString();
+    const fmt = (ts) => new Date(ts).toLocaleString(locale());
     return h('div', { class: 'dialog-body' },
-      dialogHeader('Backup', close),
+      dialogHeader(t('Backup'), close),
       h('div', { class: 'dialog-content' },
-        h('h3', null, 'Esporta'),
-        h('p', { class: 'field-hint' }, 'Scarica le liste attualmente caricate (bozza inclusa). Il file contiene gli URL degli addon, che possono includere chiavi personali.'),
+        h('h3', null, t('Export')),
+        h('p', { class: 'field-hint' }, t('Downloads the lists currently loaded (draft included). The file contains the addon URLs, which may include personal keys.')),
         h('div', { class: 'row-actions' },
           h('button', { type: 'button', class: 'btn', disabled: !ready.length, onClick: () => exportPanels(ready, `addon-manager-backup-${new Date().toISOString().slice(0, 10)}.json`) },
-            icon('download', 15), ' Esporta tutte le liste'),
-          h('span', { class: 'field-hint' }, 'Per importare: menu ⋯ del pannello → «Importa da file».')),
-        h('h3', null, 'Backup automatici'),
-        h('p', { class: 'field-hint' }, 'Prima di ogni salvataggio viene conservato (in questo browser) lo stato che stai per sovrascrivere: ultimi 25.'),
+            icon('download', 15), ' ', t('Export all lists')),
+          h('span', { class: 'field-hint' }, t('To import: panel ⋯ menu → “Import from file”.'))),
+        h('h3', null, t('Automatic backups')),
+        h('p', { class: 'field-hint' }, t('Before every save, the state you are about to overwrite is kept (in this browser): the last 25.')),
         auto.length
           ? h('ul', { class: 'backup-list' }, ...auto.map((b) => h('li', null,
-            h('div', null, h('strong', null, `${b.account || ''} · ${b.title}`), h('small', null, `${fmt(b.ts)} — ${b.items.length} addon`)),
-            h('button', { type: 'button', class: 'btn small', onClick: () => downloadFile(`addon-manager-auto-${b.ts}.json`, JSON.stringify(buildExport([{ title: b.title, account: b.account, kind: b.kind, items: b.items }]), null, 2)) }, icon('download', 14), ' Scarica'))))
-          : h('p', { class: 'muted' }, 'Ancora nessun backup automatico.'),
-        h('h3', null, 'Installa come app'),
+            h('div', null, h('strong', null, `${b.account || ''} · ${b.title}`), h('small', null, `${fmt(b.ts)} — ${t('{n} addons', { n: b.items.length })}`)),
+            h('button', { type: 'button', class: 'btn small', onClick: () => downloadFile(`addon-manager-auto-${b.ts}.json`, JSON.stringify(buildExport([{ title: b.title, account: b.account, kind: b.kind, items: b.items }]), null, 2)) }, icon('download', 14), ' ', t('Download')))))
+          : h('p', { class: 'muted' }, t('No automatic backups yet.')),
+        h('h3', null, t('Language')),
+        languageSection(),
+        h('h3', null, t('Install as an app')),
         installSection(),
-        h('h3', null, 'Dati in questo browser'),
-        h('p', { class: 'field-hint' }, 'Esce da tutti gli account (invalidando i token sul server) e cancella token, backup e impostazioni salvati qui. Da usare su un computer non tuo o se temi che un token sia stato esposto.'),
+        h('h3', null, t('Data in this browser')),
+        h('p', { class: 'field-hint' }, t('Signs out of all accounts (invalidating the tokens on the server) and deletes the tokens, backups and settings saved here. Use it on a computer that is not yours or if you fear a token has been exposed.')),
         h('div', { class: 'row-actions' }, h('button', { type: 'button', class: 'btn danger', onClick: async () => {
           const ok = await confirmDialog({
-            title: 'Uscire da tutto e cancellare i dati locali?', danger: true, confirm: 'Esci e cancella',
-            body: h('p', null, 'Le modifiche non salvate andranno perse. Gli addon sui server non vengono toccati.'),
+            title: t('Sign out of everything and delete local data?'), danger: true, confirm: t('Sign out and delete'),
+            body: h('p', null, t('Unsaved changes will be lost. The addons on the servers are not touched.')),
           });
           if (!ok) return;
           await app.forgetEverything();
-          toast('Disconnesso da tutti gli account. Dati locali cancellati.', 'ok');
+          toast(t('Signed out of all accounts. Local data deleted.'), 'ok');
           close();
-        } }, icon('logout', 15), ' Esci da tutto e cancella i dati locali'))),
-      h('div', { class: 'dialog-actions' }, h('button', { type: 'button', class: 'btn', onClick: () => close() }, 'Chiudi')));
-  }, { wide: true, label: 'Backup' });
+        } }, icon('logout', 15), ' ', t('Sign out of everything and delete local data')))),
+      h('div', { class: 'dialog-actions' }, h('button', { type: 'button', class: 'btn', onClick: () => close() }, t('Close'))));
+  }, { wide: true, label: t('Backup') });
 }
 
 // ---------- conferme di salvataggio ----------
 const names = (list, max = 8) => h('ul', { class: 'name-list' }, ...list.slice(0, max).map((i) => h('li', null, shownName(i))),
-  list.length > max ? h('li', { class: 'muted' }, `… e altri ${list.length - max}`) : null);
+  list.length > max ? h('li', { class: 'muted' }, t('… and {n} more', { n: list.length - max })) : null);
 
 export async function confirmSave(panel, diff) {
   const empty = panel.items.length === 0;
   return !!(await confirmDialog({
-    title: empty ? 'Svuotare completamente la lista?' : `Salvare «${panel.title}»?`,
+    title: empty ? t('Empty the list completely?') : t('Save “{title}”?', { title: panel.title }),
     danger: true,
-    confirm: empty ? 'Svuota la lista' : 'Salva e rimuovi',
+    confirm: empty ? t('Empty the list') : t('Save and remove'),
     body: h('div', null,
-      h('p', null, empty ? 'La lista è vuota: verranno cancellati TUTTI gli addon di questo ' + (panel.kind === 'nuvio' ? 'profilo.' : 'account.')
-        : `Verranno rimossi ${diff.removed.length} addon dal server:`),
+      h('p', null, empty ? (panel.kind === 'nuvio' ? t('The list is empty: ALL the addons of this profile will be deleted.') : t('The list is empty: ALL the addons of this account will be deleted.'))
+        : t('{n} addons will be removed from the server:', { n: diff.removed.length })),
       empty ? null : names(diff.removed),
-      h('p', { class: 'field-hint' }, 'Prima di scrivere viene salvato un backup automatico dello stato attuale.')),
+      h('p', { class: 'field-hint' }, t('An automatic backup of the current state is saved before writing.'))),
   }));
 }
 
 export async function confirmConflict(panel, remoteItems) {
   const r = await confirmDialog({
-    title: 'La lista è cambiata sul server',
-    confirm: 'Unisci le modifiche',
+    title: t('The list has changed on the server'),
+    confirm: t('Merge changes'),
     focus: 'confirm',
-    extra: [{ label: 'Ricarica dal server', value: 'reload' }, { label: 'Sovrascrivi', value: 'overwrite', danger: true }],
+    extra: [{ label: t('Reload from server'), value: 'reload' }, { label: t('Overwrite'), value: 'overwrite', danger: true }],
     body: h('div', null,
-      h('p', null, `«${panel.title}» è stata modificata da un altro dispositivo o app dopo che l'hai caricata (ora ha ${remoteItems.length} addon).`),
+      h('p', null, t('“{title}” was modified by another device or app after you loaded it (it now has {n} addons).', { title: panel.title, n: remoteItems.length })),
       h('ul', { class: 'name-list' },
-        h('li', null, h('strong', null, 'Unisci'), ' (consigliato): applica le tue modifiche sopra quelle fatte altrove, senza perderne nessuna.'),
-        h('li', null, h('strong', null, 'Ricarica'), ': scarta le tue modifiche.'),
-        h('li', null, h('strong', null, 'Sovrascrivi'), ': scarta le modifiche fatte altrove.'))),
+        h('li', null, h('strong', null, t('Merge')), ' ', t('(recommended): applies your changes on top of those made elsewhere, without losing any.')),
+        h('li', null, h('strong', null, t('Reload')), t(': discards your changes.')),
+        h('li', null, h('strong', null, t('Overwrite')), t(': discards the changes made elsewhere.')))),
   });
   return r === true ? 'merge' : r === 'reload' ? 'reload' : r === 'overwrite' ? 'overwrite' : 'cancel';
+}
+
+// ---------- lingua ----------
+/** Scelta della lingua nella finestra Backup (sui telefoni la barra in alto non ha spazio per il pulsante). */
+export function languageSection({ small = false, className = 'row-actions' } = {}) {
+  return h('div', { class: className, role: 'radiogroup', 'aria-label': t('Language') },
+    ...Object.entries(LANGUAGES).map(([code, l]) => h('button', {
+      type: 'button', role: 'radio', 'aria-checked': String(code === getLang()), class: `btn${small ? ' small' : ''}${code === getLang() ? ' primary' : ''}`,
+      onClick: () => { if (code !== getLang()) { setLang(code); document.querySelector('dialog[open] .dialog-head .icon-btn')?.click(); } },
+    }, l.name)));
 }

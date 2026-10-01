@@ -1,4 +1,5 @@
 import { idOf, timeoutSignal, isTimeout } from './util.js';
+import { t } from './i18n.js';
 
 const TTL = 5 * 60 * 1000;
 const MAX_BYTES = 2 * 1024 * 1024; // un manifest reale pesa pochi KB: oltre è un errore o un abuso
@@ -26,27 +27,27 @@ export async function fetchManifest(url, { timeout = 8000, force = false } = {})
     if (!res.ok) {
       result = { ok: false, kind: 'http', error: `HTTP ${res.status}` };
     } else if (Number(res.headers?.get?.('content-length')) > MAX_BYTES) {
-      result = { ok: false, kind: 'invalid', error: 'Manifest troppo grande' };
+      result = { ok: false, kind: 'invalid', error: t('Manifest too large') };
     } else {
       const text = await res.text();
       let json = null;
       if (text.length <= MAX_BYTES) { try { json = JSON.parse(text); } catch { /* non JSON */ } }
       result = text.length > MAX_BYTES
-        ? { ok: false, kind: 'invalid', error: 'Manifest troppo grande' }
+        ? { ok: false, kind: 'invalid', error: t('Manifest too large') }
         : validateManifest(json)
           ? { ok: true, manifest: json, ms: Date.now() - started }
-          : { ok: false, kind: 'invalid', error: 'Manifest non valido' };
+          : { ok: false, kind: 'invalid', error: t('Invalid manifest') };
     }
   } catch (e) {
     const isHttp = /^http:\/\//i.test(url) && typeof location !== 'undefined' && location.protocol === 'https:';
     result = isTimeout(e)
-      ? { ok: false, kind: 'timeout', error: 'Timeout' }
+      ? { ok: false, kind: 'timeout', error: t('Timeout') }
       : {
           ok: false,
           kind: 'network',
           error: isHttp
-            ? 'URL http:// bloccato dal browser su una pagina https'
-            : 'Non raggiungibile (server offline o CORS non consentito)',
+            ? t('http:// URL blocked by the browser on an https page')
+            : t('Unreachable (server offline or CORS not allowed)'),
         };
   }
   if (result.ok) cache.set(key, { t: Date.now(), result });

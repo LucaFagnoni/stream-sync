@@ -36,6 +36,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .search { order: 1; position: relative; flex: 1; max-width: 420px; }
 .search .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); }
 .search input[type=search] { width: 100%; padding: 8px 10px 8px 32px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.lang-btn { font-weight: 600; min-width: 44px; justify-content: center; }
+.empty-lang { margin-top: 18px; display: flex; gap: 8px; justify-content: center; }
 .top-actions { order: 2; margin-left: auto; display: flex; gap: 8px; align-items: center; }
 
 /* ---- bottoni ---- */
@@ -200,6 +202,7 @@ textarea { resize: vertical; font: 12.5px ui-monospace, monospace; }
   .top-actions { margin-left: auto; gap: 4px; flex-wrap: nowrap; }
   .top-actions .btn { padding: 0 11px; min-height: 38px; }
   .top-actions .lbl { display: none; }
+  .lang-btn { display: none; } /* sui telefoni la lingua si sceglie in Backup o nella schermata iniziale */
   .panel.acct-before { box-shadow: 0 -6px 0 0 var(--primary); } .panel.acct-after { box-shadow: 0 6px 0 0 var(--primary); }
   .count-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #fff; color: var(--primary); font-size: 11px; font-weight: 700; }
   .accounts { padding: 12px max(12px, var(--safe-right)) 2px max(12px, var(--safe-left)); }
@@ -243,7 +246,7 @@ textarea { resize: vertical; font: 12.5px ui-monospace, monospace; }
     display: grid; grid-template-columns: repeat(2, 38px); align-self: flex-start; }
   .ractions .icon-btn { width: 38px; height: 38px; }
   /* Annulla/Ripeti disattivati occupano 80px che servono al titolo del pannello */
-  .phead .icon-btn:disabled[aria-label="Annulla"], .phead .icon-btn:disabled[aria-label="Ripeti"] { display: none; }
+  .phead .icon-btn:disabled[data-act="undo"], .phead .icon-btn:disabled[data-act="redo"] { display: none; }
   [data-act="copy"] { order: 1; } [data-act="more"] { order: 2; } [data-act="up"] { order: 3; } [data-act="down"] { order: 4; }
   /* Barra della selezione: solo icone, una riga */
   .selbar .lbl, .selcount .lbl { display: none; }

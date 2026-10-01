@@ -247,7 +247,7 @@ test('Stremio: descrittori round-trip; transportName (template) solo per gli add
   assert.deepEqual(toDescriptor(item), d);
   assert.equal(toDescriptor(item, 'http').transportName, undefined, 'non va aggiunto a un descrittore esistente');
   assert.equal(toDescriptor({ url: 'https://n/manifest.json', manifest: { id: 'n', name: 'N' } }, 'http').transportName, 'http');
-  assert.throws(() => toDescriptor({ url: 'x', manifest: null }), /Manifest mancante/);
+  assert.throws(() => toDescriptor({ url: 'x', manifest: null }), /Missing manifest/);
 });
 
 // ---------- Nuvio API ----------
@@ -290,7 +290,7 @@ test('Nuvio: listProfiles normalizza, ordina e garantisce il profilo 1', async (
   const s = new NuvioSession({ access_token: 'AT', refresh_token: 'RT', expires_at: Date.now() + 1e6 });
   const p = await s.listProfiles();
   assert.deepEqual(p.map((x) => x.index), [1, 3]);
-  assert.equal(p[1].name, 'Profilo 3');
+  assert.equal(p[1].name, 'Profile 3');
   assert.equal(p[1].usesPrimary, true);
 });
 
@@ -434,7 +434,7 @@ test('mergeThreeWay: stesso addon aggiunto da entrambe le parti non viene duplic
 
 test('convertItem: l\'addon locale di Stremio (127.0.0.1) non viene copiato su Nuvio', async () => {
   const local = mk('http://127.0.0.1:11470/local-addon/manifest.json', { manifest: { id: 'local', name: 'Local Files' } });
-  await assert.rejects(convertItem(local, 'nuvio'), /locale/);
+  await assert.rejects(convertItem(local, 'nuvio'), /local Stremio addon/);
 });
 
 test('Nuvio: refresh fallito per rete NON invalida la sessione (non è "expired")', async () => {
@@ -459,7 +459,7 @@ test('Nuvio: se un\'altra scheda ha già ruotato il token, lo adotta senza riusa
 test('Nuvio: righe di più utenti nello stesso profilo -> errore, niente push ambiguo', async () => {
   stubFetch(() => ({ body: [{ url: 'https://a/manifest.json', user_id: 'u1' }, { url: 'https://b/manifest.json', user_id: 'u2' }] }));
   const s = new NuvioSession({ access_token: 'AT', refresh_token: 'RT', expires_at: Date.now() + 1e6 });
-  await assert.rejects(s.listAddons(1), /più utenti/);
+  await assert.rejects(s.listAddons(1), /more than one user/);
 });
 
 // ---------- store: split localStorage / sessionStorage ----------
@@ -721,4 +721,111 @@ test('service worker: installa tutto l\'elenco e all\'attivazione elimina solo l
   let activated; sw.handlers.activate({ waitUntil: (p) => { activated = p; } });
   await activated;
   assert.deepEqual([...sw.stores.keys()].sort(), ['addon-manager-v2', 'altra-app']);
+});
+
+// ---------- lingue ----------
+const SRC_FILES = (dir) => readdirSync(dir).flatMap((f) => {
+  const p = `${dir}/${f}`;
+  return statSync(p).isDirectory() ? SRC_FILES(p) : p.endsWith('.js') ? [p] : [];
+});
+const jsRoot = fileURLToPath(new URL('../js', import.meta.url));
+const T_CALL = /\bt\(\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"|`([^`\\]*)`)/g;
+const unesc = (s) => s.replace(/\\'/g, "'").replace(/\\"/g, '"').replace(/\\n/g, '\n');
+const usedKeys = () => {
+  const keys = new Set();
+  for (const f of SRC_FILES(jsRoot).filter((p) => !p.endsWith('locales/it.js'))) {
+    for (const m of readFileSync(f, 'utf8').matchAll(T_CALL)) keys.add(unesc(m[1] ?? m[2] ?? m[3]));
+  }
+  const html = readFileSync(fileURLToPath(new URL('../index.html', import.meta.url)), 'utf8');
+  for (const m of html.matchAll(/data-i18n(?:-[a-z-]+)?="([^"]+)"/g)) keys.add(m[1]);
+  keys.add('Addon Manager — Stremio and Nuvio');
+  keys.add('Addon Manager: manage, reorder, update and copy the addons of your Stremio and Nuvio accounts from a single page.');
+  return keys;
+};
+const placeholders = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
+
+test('lingue: ogni testo tradotto nel codice ha la versione italiana, e il dizionario non ha voci inutili', async () => {
+  const it = (await import('../js/locales/it.js')).default;
+  const used = usedKeys();
+  const missing = [...used].filter((k) => !Object.hasOwn(it, k));
+  assert.deepEqual(missing, [], `testi senza traduzione italiana:\n${missing.join('\n')}`);
+  const unused = Object.keys(it).filter((k) => !used.has(k));
+  assert.deepEqual(unused, [], `voci italiane mai usate:\n${unused.join('\n')}`);
+  for (const [k, v] of Object.entries(it)) assert.equal(placeholders(v), placeholders(k), `segnaposto diversi: ${k}`);
+});
+
+test('lingue: t() riceve sempre un testo letterale (altrimenti non si può verificare né estrarre)', () => {
+  const bad = [];
+  for (const f of SRC_FILES(jsRoot).filter((p) => !p.endsWith('locales/it.js') && !p.endsWith('i18n.js'))) {
+    readFileSync(f, 'utf8').split('\n').forEach((line, n) => {
+      if (/^\s*(\/\/|\*)/.test(line)) return;
+      for (const m of line.matchAll(/(?<![\w.$])t\(\s*([^'"`\s)])/g)) bad.push(`${f.split('/js/')[1]}:${n + 1}: ${line.trim().slice(m.index, m.index + 50)}`);
+    });
+  }
+  assert.deepEqual(bad, []);
+});
+
+test('lingue: nessun testo italiano dimenticato nel codice (parole e accenti tipici)', () => {
+  const ITALIAN = /[àèéìòù]|«|»|\b(?:non|della|degli|delle|nel|nella|sono|viene|vengono|errore|salva|aggiungi|rimuovi|account collegat|accesso|riprova|addon di)\b/i;
+  const found = [];
+  for (const f of SRC_FILES(jsRoot).filter((p) => !p.endsWith('locales/it.js'))) {
+    readFileSync(f, 'utf8').split('\n').forEach((line, n) => {
+      if (/^\s*(\/\/|\*|\/\*)/.test(line)) return;
+      const code = line.replace(/\s\/\/.*$/, '').replace(/\/\*.*?\*\//g, '');
+      for (const m of code.matchAll(/'((?:[^'\\]|\\.)*)'|`([^`]*)`/g)) {
+        const text = m[1] ?? m[2];
+        if (ITALIAN.test(text) && !/^\s*t\(/.test(code.slice(Math.max(0, m.index - 3), m.index + 3))) found.push(`${f.split('/js/')[1]}:${n + 1}: ${text.slice(0, 60)}`);
+      }
+    });
+  }
+  assert.deepEqual(found, []);
+});
+
+test('lingue: predefinita inglese, la scelta si salva e si ritrova alla visita successiva', async () => {
+  globalThis.localStorage = new MemStorage();
+  const fresh = (n) => import(`../js/i18n.js?visita=${n}`);
+  const first = await fresh(1);
+  assert.equal(first.getLang(), 'en', 'prima visita: inglese, qualunque sia la lingua del browser');
+  assert.equal(first.t('Save all'), 'Save all');
+  assert.equal(first.locale(), 'en-US');
+  first.setLang('it');
+  assert.equal(first.t('Save all'), 'Salva tutto');
+  assert.equal(first.locale(), 'it-IT');
+  assert.equal(localStorage.getItem('addonmanager.lang'), 'it');
+  assert.equal((await fresh(2)).getLang(), 'it', 'visita successiva: italiano');
+  first.setLang('en');
+  assert.equal((await fresh(3)).getLang(), 'en', 'e di nuovo inglese');
+  assert.equal(first.setLang('fr'), false, 'lingua non supportata ignorata');
+  assert.equal(first.getLang(), 'en');
+  localStorage.setItem('addonmanager.lang', 'klingon');
+  assert.equal((await fresh(4)).getLang(), 'en', 'valore salvato non valido: predefinita');
+});
+
+test('lingue: segnaposto, chiavi senza traduzione e notifica del cambio', async () => {
+  globalThis.localStorage = new MemStorage();
+  const i18n = await import('../js/i18n.js?segnaposto');
+  const seen = [];
+  const off = i18n.onLangChange((l) => seen.push(l));
+  assert.equal(i18n.t('Saved: {title}', { title: 'A' }), 'Saved: A');
+  assert.equal(i18n.t('{n} addons', { n: 3 }), '3 addons');
+  assert.equal(i18n.t('Hello {who}', {}), 'Hello {who}', 'segnaposto senza valore: lasciato com\'è');
+  i18n.setLang('it', { persist: false });
+  assert.equal(i18n.t('Saved: {title}', { title: 'A' }), 'Salvato: A');
+  assert.equal(i18n.t('Testo non tradotto {x}', { x: 1 }), 'Testo non tradotto 1', 'senza traduzione: la chiave');
+  i18n.setLang('it', { persist: false });
+  i18n.setLang('en', { persist: false });
+  off();
+  i18n.setLang('it', { persist: false });
+  assert.deepEqual(seen, ['it', 'en'], 'notifica solo quando la lingua cambia davvero');
+  assert.equal(localStorage.getItem('addonmanager.lang'), null, 'persist: false non scrive');
+});
+
+test('lingue: gli errori delle API seguono la lingua scelta', async () => {
+  const i18n = await import('../js/i18n.js');
+  const { explain } = await import('../js/app.js');
+  i18n.setLang('en', { persist: false });
+  assert.equal(explain(new Error('Invalid login credentials')), 'Incorrect email or password.');
+  i18n.setLang('it', { persist: false });
+  assert.equal(explain(new Error('Invalid login credentials')), 'Email o password non corrette.');
+  i18n.setLang('en', { persist: false });
 });

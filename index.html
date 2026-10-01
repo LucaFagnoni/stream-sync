@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Addon Manager — Stremio e Nuvio</title>
-  <meta name="description" content="Addon Manager: gestisci, riordina, aggiorna e copia gli addon dei tuoi account Stremio e Nuvio da un'unica pagina.">
+  <title>Addon Manager — Stremio and Nuvio</title>
+  <meta name="description" content="Addon Manager: manage, reorder, update and copy the addons of your Stremio and Nuvio accounts from a single page.">
   <meta name="referrer" content="no-referrer">
   <!-- Le credenziali restano nel browser: la CSP limita script e form alla sola origine locale e
        impone Trusted Types (nessun innerHTML con stringhe arbitrarie).
@@ -22,26 +22,27 @@
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-  <a class="skip" href="#board">Vai alle liste</a>
+  <a class="skip" href="#board" data-i18n="Skip to the lists">Skip to the lists</a>
   <header class="topbar">
-    <!-- Riga principale (logo + azioni): su telefono resta fissa in alto; la ricerca scorre con la pagina -->
+    <!-- Testi: data-i18n* = chiave inglese (js/i18n.js). Riga principale (logo + azioni): su telefono resta fissa in alto; la ricerca scorre con la pagina -->
     <div class="topbar-main">
       <div class="brand"><img class="logo-mark" src="img/logo.svg" alt="" width="30" height="30"><strong>Addon Manager</strong></div>
       <div class="top-actions">
         <button id="save-all" type="button" class="btn primary" disabled></button>
-        <button id="backup" type="button" class="btn" title="Backup ed esportazione" aria-label="Backup">Backup</button>
-        <button id="theme" type="button" class="icon-btn" aria-label="Cambia tema" title="Cambia tema"></button>
-        <button id="add-account" type="button" class="btn" title="Aggiungi account" aria-label="Aggiungi account">+ Account</button>
+        <button id="backup" type="button" class="btn" data-i18n-title="Backup and export" data-i18n-aria-label="Backup" title="Backup and export" aria-label="Backup">Backup</button>
+        <button id="theme" type="button" class="icon-btn" data-i18n-title="Change theme" data-i18n-aria-label="Change theme" aria-label="Change theme" title="Change theme"></button>
+        <button id="lang" type="button" class="btn lang-btn" aria-haspopup="menu" data-i18n-title="Language" data-i18n-aria-label="Language" aria-label="Language" title="Language">EN</button>
+        <button id="add-account" type="button" class="btn" data-i18n-title="Add account" data-i18n-aria-label="Add account" title="Add account" aria-label="Add account">+ Account</button>
       </div>
     </div>
     <div class="search">
       <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-      <input id="search" type="search" placeholder="Cerca in tutte le liste" aria-label="Cerca addon" autocomplete="off" spellcheck="false">
+      <input id="search" type="search" placeholder="Search all lists" data-i18n-aria-label="Search addons" aria-label="Search addons" autocomplete="off" spellcheck="false">
     </div>
   </header>
-  <aside id="install-banner" class="install-banner" aria-label="Installazione dell'app" hidden></aside>
-  <nav id="accounts" class="accounts" aria-label="Account collegati"></nav>
-  <main id="board" class="board" tabindex="-1"><noscript>Questa pagina richiede JavaScript.</noscript></main>
+  <aside id="install-banner" class="install-banner" data-i18n-aria-label="App installation" aria-label="App installation" hidden></aside>
+  <nav id="accounts" class="accounts" data-i18n-aria-label="Connected accounts" aria-label="Connected accounts"></nav>
+  <main id="board" class="board" tabindex="-1"><noscript>This page requires JavaScript.</noscript></main>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

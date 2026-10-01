@@ -50,6 +50,7 @@ Addon Manager è un'applicazione web statica, senza backend: il browser comunica
 - Ogni modifica resta una **bozza locale**, con annulla/ripeti, finché non premi «Salva». Un riepilogo (`+2 −1 ~1 ↕`) mostra cosa cambierà.
 - **Sincronizza da…**: copia in una lista gli addon mancanti di un'altra, oppure rendila identica alla sorgente, con anteprima.
 - Importazione ed esportazione in JSON; backup automatico dello stato remoto prima di ogni salvataggio.
+- **Due lingue**: inglese (US, predefinita) e italiano ([vedi sotto](#lingua)).
 - Tema chiaro e scuro; **installabile come app** su computer e telefono, con l'interfaccia disponibile anche senza connessione.
 
 ## Guida rapida
@@ -58,6 +59,15 @@ Addon Manager è un'applicazione web statica, senza backend: il browser comunica
 2. Scegli Stremio o Nuvio e accedi con email e password. Attiva «Ricordami» solo su un dispositivo personale.
 3. Organizza gli addon: copiali tra gli account, riordinali, aggiungili da URL. Finché non salvi, nulla cambia sui server.
 4. Premi **Salva** sulla colonna (o **Salva tutto**). Se rimuovi addon, ti viene chiesta una conferma con l'elenco.
+
+### Lingua
+
+L'interfaccia è in **inglese (US) alla prima visita**, qualunque sia la lingua del browser, e si può passare all'**italiano**:
+
+- **Computer:** pulsante `EN` / `IT` nella barra in alto.
+- **Telefono:** *Backup → Lingua*, oppure i pulsanti nella schermata iniziale (nella barra non c'è spazio).
+
+La scelta si ridisegna subito, senza perdere bozze o selezioni, e viene **salvata nel browser** (`localStorage`, chiave `addonmanager.lang`): alla visita successiva l'app si apre nell'ultima lingua scelta. Non è un dato personale, quindi resta anche dopo «Esci da tutto». Anche date e orari seguono la lingua (`en-US` / `it-IT`). Nel resto di questa guida i nomi dei pulsanti sono quelli italiani.
 
 ### Installazione come app (computer e telefono)
 
@@ -154,6 +164,7 @@ js/manifest.js                     download e validazione dei manifest
 js/model.js                        bozza, annulla/ripeti, diff, unione a tre vie
 js/convert.js, backup.js           conversione tra servizi, import/export
 js/store.js                        persistenza locale
+js/i18n.js, locales/it.js          lingue: t(), preferenza salvata, dizionario italiano
 js/install.js                      installazione come app e registrazione del service worker
 js/app.js                          controller: account, caricamento, salvataggio, copia
 js/ui/                             componenti dell'interfaccia
@@ -164,6 +175,8 @@ tests/                             test unitari ed end-to-end
 ```
 
 ## Sviluppo
+
+**Testi dell'interfaccia.** Nel codice sono scritti in inglese e passano da `t('English text')` (`js/i18n.js`); il testo inglese fa da chiave e `js/locales/it.js` contiene la traduzione. Per i segnaposto si usa `t('Saved: {title}', { title })`; nell'HTML statico gli attributi `data-i18n`, `data-i18n-title`, `data-i18n-aria-label`. Un test unitario controlla che ogni testo abbia la traduzione e gli stessi segnaposto, che `t()` riceva sempre un testo letterale e che nel codice non sia rimasto italiano non tradotto. Una lingua nuova richiede un nuovo dizionario in `js/locales/` e una voce in `LANGUAGES`.
 
 Requisiti: Node.js 22 o superiore. Non ci sono dipendenze da installare.
 

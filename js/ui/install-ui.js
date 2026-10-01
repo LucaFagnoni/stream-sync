@@ -1,41 +1,42 @@
 import { h, icon, dialog, dialogHeader, fill } from './dom.js';
+import { t, onLangChange } from '../i18n.js';
 import {
   onInstallChange, isStandalone, installPlatform, canPromptInstall, promptInstall, bannerDismissed, dismissBanner,
 } from '../install.js';
 
-const STEPS = {
+const steps = () => ({
   ios: [
-    'Tocca il pulsante Condividi (il quadrato con la freccia verso l\'alto) nella barra del browser.',
-    'Scorri l\'elenco e scegli «Aggiungi alla schermata Home».',
-    'Conferma con «Aggiungi»: l\'icona di Addon Manager comparirà nella schermata Home.',
+    t('Tap the Share button (the square with the arrow pointing up) in the browser bar.'),
+    t('Scroll the list and choose “Add to Home Screen”.'),
+    t('Confirm with “Add”: the Addon Manager icon will appear on your Home Screen.'),
   ],
   'mac-safari': [
-    'Nel menu File di Safari scegli «Aggiungi al Dock…» (Safari 17 e macOS Sonoma o successivi).',
-    'Conferma: Addon Manager si aprirà in una finestra tutta sua, con l\'icona nel Dock.',
+    t('In Safari’s File menu choose “Add to Dock…” (Safari 17 and macOS Sonoma or later).'),
+    t('Confirm: Addon Manager will open in a window of its own, with its icon in the Dock.'),
   ],
   other: [
-    'Cerca l\'icona di installazione nella barra degli indirizzi (Chrome, Edge) oppure «Installa app» / «Aggiungi alla schermata Home» nel menu del browser.',
-    'Il browser propone l\'installazione solo dopo qualche istante di utilizzo. Non tutti i browser permettono di installare le app web.',
+    t('Look for the install icon in the address bar (Chrome, Edge) or “Install app” / “Add to Home Screen” in the browser menu.'),
+    t('The browser only offers installation after you have used the page for a little while. Not all browsers can install web apps.'),
   ],
-};
+});
 
 /** Finestra con i passi da fare a mano (Safari non ha un pulsante che apra l'installazione). */
 export function openInstallHelp() {
   const platform = installPlatform();
   return dialog((close) => h('div', { class: 'dialog-body' },
-    dialogHeader('Installa Addon Manager', close),
+    dialogHeader(t('Install Addon Manager'), close),
     h('div', { class: 'dialog-content' },
-      h('p', { class: 'field-hint' }, 'Si apre in una finestra tutta sua, con la propria icona, senza barra del browser.'),
-      h('ol', { class: 'steps' }, ...STEPS[platform].map((t) => h('li', null, t)))),
-    h('div', { class: 'dialog-actions' }, h('button', { type: 'button', class: 'btn primary', onClick: () => close() }, 'Ho capito'))), { label: 'Installazione' });
+      h('p', { class: 'field-hint' }, t('It opens in a window of its own, with its own icon, without the browser bar.')),
+      h('ol', { class: 'steps' }, ...steps()[platform].map((text) => h('li', null, text)))),
+    h('div', { class: 'dialog-actions' }, h('button', { type: 'button', class: 'btn primary', onClick: () => close() }, t('Got it')))), { label: t('Installation') });
 }
 
 /** Il pulsante giusto per il browser in uso: apre l'installazione vera, oppure le istruzioni. */
 function installButton(primary = true) {
   if (canPromptInstall()) {
-    return h('button', { type: 'button', class: `btn${primary ? ' primary' : ''}`, onClick: () => promptInstall() }, icon('download', 15), ' Installa');
+    return h('button', { type: 'button', class: `btn${primary ? ' primary' : ''}`, onClick: () => promptInstall() }, icon('download', 15), ` ${t('Install')}`);
   }
-  return h('button', { type: 'button', class: `btn${primary ? ' primary' : ''}`, onClick: openInstallHelp }, 'Come si installa');
+  return h('button', { type: 'button', class: `btn${primary ? ' primary' : ''}`, onClick: openInstallHelp }, t('How to install'));
 }
 
 /**
@@ -50,20 +51,21 @@ export function mountInstallBanner(host) {
     fill(host, h('div', { class: 'install-inner' },
       h('img', { class: 'install-logo', src: 'img/logo.svg', alt: '', width: 32, height: 32 }),
       h('div', { class: 'install-text' },
-        h('strong', null, 'Installa Addon Manager'),
-        h('span', null, 'Si apre come un\'app, in una finestra tutta sua, con la sua icona.')),
+        h('strong', null, t('Install Addon Manager')),
+        h('span', null, t('It opens like an app, in a window of its own, with its own icon.'))),
       h('div', { class: 'install-actions' },
         installButton(true),
-        h('button', { type: 'button', class: 'btn', onClick: dismissBanner }, 'Non ora'))));
+        h('button', { type: 'button', class: 'btn', onClick: dismissBanner }, t('Not now')))));
   };
   onInstallChange(render);
+  onLangChange(render);
   render();
 }
 
 /** Sezione sempre disponibile nella finestra Backup, anche dopo aver chiuso l'invito. */
 export function installSection() {
-  if (isStandalone()) return h('p', { class: 'field-hint' }, 'Stai usando Addon Manager come app installata.');
+  if (isStandalone()) return h('p', { class: 'field-hint' }, t('You are using Addon Manager as an installed app.'));
   return h('div', null,
-    h('p', { class: 'field-hint' }, 'Si apre in una finestra tutta sua, con la propria icona; l\'interfaccia si carica anche senza connessione (per gestire gli addon serve la rete).'),
+    h('p', { class: 'field-hint' }, t('It opens in a window of its own, with its own icon; the interface also loads without a connection (managing addons needs the network).')),
     h('div', { class: 'row-actions' }, installButton(false)));
 }

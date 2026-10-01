@@ -2,6 +2,7 @@
 // L'header `apikey` è la *publishable key* pubblicata nella documentazione ufficiale.
 
 import { timeoutSignal, isTimeout } from './util.js';
+import { t } from './i18n.js';
 
 export const NUVIO_BASE = 'https://api.nuvio.tv';
 export const NUVIO_KEY = 'sb_publishable_1Clq8rlTVACkdcZuqr6_AD__xUUC_EN';
@@ -19,7 +20,7 @@ export class NuvioError extends Error {
 
 function errorMessage(body, status) {
   const m = body?.message || body?.msg || body?.error_description || body?.error;
-  return typeof m === 'string' && m ? m : `Errore HTTP ${status}`;
+  return typeof m === 'string' && m ? m : t('HTTP error {status}', { status });
 }
 
 async function raw(path, { method = 'GET', body, token, headers = {} } = {}) {
@@ -37,7 +38,7 @@ async function raw(path, { method = 'GET', body, token, headers = {} } = {}) {
       signal: timeoutSignal(TIMEOUT),
     });
   } catch (e) {
-    throw new NuvioError(isTimeout(e) ? 'api.nuvio.tv non ha risposto in tempo' : 'Impossibile contattare api.nuvio.tv', 0);
+    throw new NuvioError(isTimeout(e) ? t('api.nuvio.tv did not respond in time') : t('Unable to reach api.nuvio.tv'), 0);
   }
   const text = await res.text();
   let json = null;
@@ -48,7 +49,7 @@ async function raw(path, { method = 'GET', body, token, headers = {} } = {}) {
 
 const toSession = (r, previous = null) => {
   if (typeof r?.access_token !== 'string' || typeof r?.refresh_token !== 'string') {
-    throw new NuvioError('Risposta di autenticazione non valida', 0);
+    throw new NuvioError(t('Invalid authentication response'), 0);
   }
   return {
     access_token: r.access_token,
@@ -97,9 +98,9 @@ export class NuvioSession {
           });
         } catch (e) {
           if ([400, 401, 403].includes(e.status)) {
-            throw new NuvioError('Sessione scaduta: effettua di nuovo l\'accesso', e.status, true);
+            throw new NuvioError(t('Session expired: sign in again'), e.status, true);
           }
-          throw new NuvioError(`Rinnovo della sessione non riuscito: ${e.message}`, e.status ?? 0);
+          throw new NuvioError(t('Session renewal failed: {message}', { message: e.message }), e.status ?? 0);
         }
         this.session = toSession(r, this.session);
         this.onChange(this.session);
@@ -135,7 +136,7 @@ export class NuvioSession {
       .filter((p) => p && typeof p === 'object')
       .map((p) => ({
         index: Number(p.profile_index),
-        name: (typeof p.name === 'string' && p.name.trim()) || `Profilo ${p.profile_index}`,
+        name: (typeof p.name === 'string' && p.name.trim()) || t('Profile {n}', { n: p.profile_index }),
         color: typeof p.avatar_color_hex === 'string' ? p.avatar_color_hex : null,
         usesPrimary: Number(p.profile_index) !== 1 && !!p.uses_primary_addons,
       }))
@@ -144,7 +145,7 @@ export class NuvioSession {
     // Un account nuovo può non avere ancora righe: il profilo 1 esiste sempre.
     return list.some((p) => p.index === 1)
       ? list
-      : [{ index: 1, name: 'Profilo 1', color: null, usesPrimary: false }, ...list];
+      : [{ index: 1, name: t('Profile {n}', { n: 1 }), color: null, usesPrimary: false }, ...list];
   }
 
   async listAddons(profile) {
@@ -155,7 +156,7 @@ export class NuvioSession {
     // Se il server restituisce righe di più utenti (account collegati), un push "sostituisci tutto"
     // non avrebbe un significato certo: meglio non gestire questo profilo.
     if (new Set(list.map((r) => r.user_id).filter(Boolean)).size > 1) {
-      throw new NuvioError('Questo profilo contiene addon di più utenti (account collegato?): per sicurezza non viene gestito qui.', 0);
+      throw new NuvioError(t('This profile contains addons from more than one user (linked account?): for safety it is not managed here.'), 0);
     }
     return list.map((r) => ({
       url: String(r.url ?? ''),

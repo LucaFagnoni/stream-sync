@@ -1,7 +1,8 @@
 // Client minimale per l'API Stremio (https://github.com/Stremio/stremio-api-client).
 // Ogni metodo è un POST JSON su /api/<metodo>; gli errori arrivano come { error: { code, message } }.
 
-import { str, timeoutSignal, isTimeout } from './util.js';
+import { str, timeoutSignal, isTimeout, maskUrl } from './util.js';
+import { t } from './i18n.js';
 
 export const STREMIO_API = 'https://api.strem.io/api/';
 const TIMEOUT = 20000;
@@ -26,18 +27,18 @@ async function call(method, body) {
       signal: timeoutSignal(TIMEOUT),
     });
   } catch (e) {
-    throw new StremioError(isTimeout(e) ? 'api.strem.io non ha risposto in tempo' : 'Impossibile contattare api.strem.io', 0);
+    throw new StremioError(isTimeout(e) ? t('api.strem.io did not respond in time') : t('Unable to reach api.strem.io'), 0);
   }
   let json;
-  try { json = await res.json(); } catch { throw new StremioError(`Risposta non valida (HTTP ${res.status})`, 0); }
-  if (json?.error) throw new StremioError(str(json.error.message) || 'Errore Stremio', json.error.code);
-  if (!res.ok || json?.result === undefined) throw new StremioError(`Errore HTTP ${res.status}`, 0);
+  try { json = await res.json(); } catch { throw new StremioError(t('Invalid response (HTTP {status})', { status: res.status }), 0); }
+  if (json?.error) throw new StremioError(str(json.error.message) || t('Stremio error'), json.error.code);
+  if (!res.ok || json?.result === undefined) throw new StremioError(t('HTTP error {status}', { status: res.status }), 0);
   return json.result;
 }
 
 export async function login(email, password) {
   const r = await call('login', { type: 'Auth', email, password });
-  if (typeof r?.authKey !== 'string' || !r.authKey) throw new StremioError('Risposta di login non valida', 0);
+  if (typeof r?.authKey !== 'string' || !r.authKey) throw new StremioError(t('Invalid login response'), 0);
   return { authKey: r.authKey, userId: r.user?._id ?? null, email: r.user?.email ?? email };
 }
 
@@ -55,7 +56,7 @@ export async function getAddons(authKey) {
 /** Sostituisce l'intera collezione: l'ordine dell'array è l'ordine mostrato in Stremio. */
 export async function setAddons(authKey, descriptors) {
   const r = await call('addonCollectionSet', { type: 'AddonCollectionSet', authKey, addons: descriptors });
-  if (r?.success === false) throw new StremioError('Il salvataggio è stato rifiutato da Stremio', 0);
+  if (r?.success === false) throw new StremioError(t('Stremio rejected the save'), 0);
 }
 
 /** Descrittore API -> item di lista. Il descrittore originale (`raw`) viene conservato intatto. */
@@ -71,7 +72,7 @@ export function fromDescriptor(d) {
  * non vengono persi; `template` (transportName) si applica solo agli addon nuovi.
  */
 export function toDescriptor(item, template) {
-  if (!item.manifest && !item.raw) throw new Error(`Manifest mancante per ${item.url}`);
+  if (!item.manifest && !item.raw) throw new Error(t('Missing manifest for {url}', { url: maskUrl(item.url) }));
   const d = item.raw ? { ...item.raw } : {};
   if (!item.raw && template !== undefined) d.transportName = template;
   d.transportUrl = item.url;

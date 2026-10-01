@@ -18,6 +18,8 @@ const SHELL = [
   'js/app.js',
   'js/backup.js',
   'js/convert.js',
+  'js/i18n.js',
+  'js/locales/it.js',
   'js/install.js',
   'js/main.js',
   'js/manifest.js',

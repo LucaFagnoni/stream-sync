@@ -3,7 +3,8 @@ import * as app from '../app.js';
 import { isProtected } from '../model.js';
 import { baseUrl, hostOf, str, arr, isHttpUrl, extractUrls, maskUrl, shownName } from '../util.js';
 import { fetchManifest } from '../manifest.js';
-import { openLogin, openInstall, openImport, openMirror, exportPanels, promptDialog } from './dialogs.js';
+import { t } from '../i18n.js';
+import { openLogin, openInstall, openImport, openMirror, exportPanels, promptDialog, languageSection } from './dialogs.js';
 
 const { state } = app;
 let filterText = '';
@@ -17,8 +18,8 @@ const ACCT_MIME = 'application/x-addon-manager-account';
 // Il trascinamento con il mouse c'è solo dove c'è un puntatore preciso; su touch si usa il menu.
 const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
 
-export const setFilter = (t) => {
-  filterText = t.trim().toLowerCase();
+export const setFilter = (text) => {
+  filterText = text.trim().toLowerCase();
   for (const p of app.panelList()) {
     // Niente azioni su righe che non si vedono: la selezione nascosta dal filtro viene tolta.
     for (const k of [...p.selected]) { const it = p.find(k); if (it && !matches(it)) p.selected.delete(k); }
@@ -50,12 +51,12 @@ const resourceNames = (m) => [...new Set(arr(m?.resources).map((r) => (typeof r 
 
 function chips(item) {
   const m = item.manifest;
-  const out = [h('span', { class: 'chip host', title: maskUrl(item.url) || undefined }, hostOf(item.url) || 'URL non valido')];
+  const out = [h('span', { class: 'chip host', title: maskUrl(item.url) || undefined }, hostOf(item.url) || t('Invalid URL'))];
   const types = arr(m?.types).map(str).filter(Boolean);
   const res = resourceNames(m);
   // Un chip per gruppo (non uno per valore): tiene le righe compatte.
-  if (types.length) out.push(h('span', { class: 'chip type', title: `Tipi: ${types.join(', ')}` }, types.join(' · ')));
-  if (res.length) out.push(h('span', { class: 'chip res', title: `Risorse: ${res.join(', ')}` }, res.join(' · ')));
+  if (types.length) out.push(h('span', { class: 'chip type', title: t('Types: {list}', { list: types.join(', ') }) }, types.join(' · ')));
+  if (res.length) out.push(h('span', { class: 'chip res', title: t('Resources: {list}', { list: res.join(', ') }) }, res.join(' · ')));
   return out;
 }
 
@@ -64,21 +65,21 @@ const displayName = shownName;
 
 function badges(item) {
   const b = [];
-  if (isProtected(item)) b.push(h('span', { class: 'badge lock', title: 'Addon protetto: non rimovibile' }, icon('lock', 11), 'Protetto'));
-  if (item.isNew) b.push(h('span', { class: 'badge new' }, 'Nuovo'));
+  if (isProtected(item)) b.push(h('span', { class: 'badge lock', title: t('Protected addon: cannot be removed') }, icon('lock', 11), t('Protected')));
+  if (item.isNew) b.push(h('span', { class: 'badge new' }, t('New')));
   if (item.updatedFrom) {
     const from = str(item.updatedFrom.from);
     const to = str(item.updatedFrom.to);
-    b.push(h('span', { class: 'badge upd', title: 'Manifest aggiornato: salva per applicarlo' }, from && to && from !== to ? `Aggiornato ${from} → ${to}` : 'Manifest aggiornato'));
+    b.push(h('span', { class: 'badge upd', title: t('Manifest updated: save to apply it') }, from && to && from !== to ? t('Updated {from} → {to}', { from, to }) : t('Manifest updated')));
   }
-  if (!item.enabled) b.push(h('span', { class: 'badge off' }, 'Disattivato'));
+  if (!item.enabled) b.push(h('span', { class: 'badge off' }, t('Disabled')));
   return b;
 }
 
 function statusDot(panel, item) {
   const s = panel.health.get(item.key);
   if (!s) return null;
-  const title = s.state === 'ok' ? `Raggiungibile (${s.ms} ms)` : s.state === 'fail' ? s.error : 'Verifica in corso…';
+  const title = s.state === 'ok' ? t('Reachable ({ms} ms)', { ms: s.ms }) : s.state === 'fail' ? s.error : t('Checking…');
   return h('span', { class: `dot ${s.state}`, title, role: 'img', 'aria-label': title });
 }
 
@@ -87,7 +88,7 @@ function buildRow(panel, item, index) {
   const version = str(m?.version);
   const description = str(m?.description);
   const sel = h('input', {
-    type: 'checkbox', class: 'sel', checked: panel.selected.has(item.key), 'aria-label': `Seleziona ${displayName(item)}`,
+    type: 'checkbox', class: 'sel', checked: panel.selected.has(item.key), 'aria-label': t('Select {name}', { name: displayName(item) }),
     onClick: (e) => onSelect(panel, item, index, e),
   });
   const row = h('li', {
@@ -104,17 +105,17 @@ function buildRow(panel, item, index) {
     description ? h('div', { class: 'desc' }, description) : null,
     h('div', { class: 'chips' }, ...chips(item))),
   h('div', { class: 'ractions' },
-    iconButton('copy', 'Copia URL del manifest', () => copyUrl(item.url), { dataset: { act: 'copy' } }),
-    iconButton('up', 'Sposta su', () => moveBy(panel, item, -1), { disabled: index === 0 || undefined, dataset: { act: 'up' } }),
-    iconButton('down', 'Sposta giù', () => moveBy(panel, item, 1), { disabled: index === panel.items.length - 1 || undefined, dataset: { act: 'down' } }),
-    iconButton('more', 'Altre azioni', (e) => itemMenu(e.currentTarget, panel, item), { dataset: { act: 'more' } })));
+    iconButton('copy', t('Copy manifest URL'), () => copyUrl(item.url), { dataset: { act: 'copy' } }),
+    iconButton('up', t('Move up'), () => moveBy(panel, item, -1), { disabled: index === 0 || undefined, dataset: { act: 'up' } }),
+    iconButton('down', t('Move down'), () => moveBy(panel, item, 1), { disabled: index === panel.items.length - 1 || undefined, dataset: { act: 'down' } }),
+    iconButton('more', t('More actions'), (e) => itemMenu(e.currentTarget, panel, item), { dataset: { act: 'more' } })));
   row.hidden = !matches(item);
   return row;
 }
 
-async function copyUrl(url, label = 'URL del manifest copiato') {
+async function copyUrl(url, label = t('Manifest URL copied')) {
   const ok = await copyText(url);
-  toast(ok ? label : 'Copia non riuscita: il browser ha negato l\'accesso agli appunti.', ok ? 'ok' : 'error', 2500);
+  toast(ok ? label : t('Copy failed: the browser denied access to the clipboard.'), ok ? 'ok' : 'error', 2500);
 }
 
 function moveBy(panel, item, delta) {
@@ -147,7 +148,7 @@ function onRowKey(e, panel, item) {
 // ---------- azioni ----------
 function removeKeys(panel, keys) {
   const r = panel.remove(keys);
-  if (r.blocked) toast(`${r.blocked} addon protetti non possono essere rimossi.`, 'info');
+  if (r.blocked) toast(t('{n} protected addons cannot be removed.', { n: r.blocked }), 'info');
   app.notifyPanel(panel);
 }
 
@@ -157,11 +158,11 @@ function targets(except) {
 
 function reportCopy(res, dst, move) {
   const bits = [];
-  if (res.added) bits.push(`${move ? 'Spostati' : 'Copiati'} ${res.added} in «${dst.title}»`);
-  if (res.skipped) bits.push(`${res.skipped} già presenti`);
-  if (res.blocked) bits.push(`${res.blocked} protetti non rimossi dall'origine`);
-  if (bits.length) toast(`${bits.join(' · ')}. Salva per applicare.`, res.added ? 'ok' : 'info');
-  if (res.failed.length) toast(`Non copiati: ${res.failed.map((f) => `${f.name} (${f.error})`).join('; ')}`, 'error');
+  if (res.added) bits.push(move ? t('Moved {n} to “{title}”', { n: res.added, title: dst.title }) : t('Copied {n} to “{title}”', { n: res.added, title: dst.title }));
+  if (res.skipped) bits.push(t('{n} already present', { n: res.skipped }));
+  if (res.blocked) bits.push(t('{n} protected, not removed from the source', { n: res.blocked }));
+  if (bits.length) toast(t('{details}. Save to apply.', { details: bits.join(' · ') }), res.added ? 'ok' : 'info');
+  if (res.failed.length) toast(t('Not copied: {list}', { list: res.failed.map((f) => `${f.name} (${f.error})`).join('; ') }), 'error');
 }
 
 async function doCopy(src, keys, dst, index, move) {
@@ -171,9 +172,9 @@ async function doCopy(src, keys, dst, index, move) {
 function targetMenu(anchor, src, keys, move) {
   const list = targets(src);
   menu(anchor, [
-    { heading: move ? 'Sposta in…' : 'Copia in…' },
+    { heading: move ? t('Move to…') : t('Copy to…') },
     ...(list.length ? list.map((p) => ({ label: app.panelLabel(p), icon: p.kind === 'nuvio' ? 'layers' : 'user', onClick: () => doCopy(src, keys, p, undefined, move) }))
-      : [{ label: 'Nessun altro pannello disponibile', disabled: true }]),
+      : [{ label: t('No other panel available'), disabled: true }]),
   ]);
 }
 
@@ -182,20 +183,20 @@ async function itemMenu(anchor, panel, item) {
   const many = keys.length > 1;
   const m = item.manifest;
   menu(anchor, [
-    { label: 'Copia URL del manifest', icon: 'copy', onClick: () => copyUrl(item.url) },
-    { label: 'Copia come link stremio://', icon: 'link', onClick: () => copyUrl(item.url.replace(/^https?:\/\//i, 'stremio://'), 'Link stremio:// copiato') },
-    { label: 'Copia il manifest JSON', icon: 'copy', onClick: () => copyManifestJson(item) },
-    { label: 'Apri il manifest', icon: 'external', disabled: !httpUrl(item.url), onClick: () => window.open(item.url, '_blank', 'noopener,noreferrer') },
+    { label: t('Copy manifest URL'), icon: 'copy', onClick: () => copyUrl(item.url) },
+    { label: t('Copy as stremio:// link'), icon: 'link', onClick: () => copyUrl(item.url.replace(/^https?:\/\//i, 'stremio://'), t('stremio:// link copied')) },
+    { label: t('Copy manifest JSON'), icon: 'copy', onClick: () => copyManifestJson(item) },
+    { label: t('Open manifest'), icon: 'external', disabled: !httpUrl(item.url), onClick: () => window.open(item.url, '_blank', 'noopener,noreferrer') },
     m?.behaviorHints?.configurable === true && baseUrl(item.url)
-      ? { label: 'Configura addon', icon: 'external', onClick: () => window.open(`${baseUrl(item.url)}/configure`, '_blank', 'noopener,noreferrer') }
+      ? { label: t('Configure addon'), icon: 'external', onClick: () => window.open(`${baseUrl(item.url)}/configure`, '_blank', 'noopener,noreferrer') }
       : null,
     'sep',
-    { label: many ? `Copia ${keys.length} in…` : 'Copia in…', icon: 'layers', onClick: () => targetMenu(anchor, panel, keys, false) },
-    { label: many ? `Sposta ${keys.length} in…` : 'Sposta in…', icon: 'layers', onClick: () => targetMenu(anchor, panel, keys, true), disabled: panel.readOnly },
+    { label: many ? t('Copy {n} to…', { n: keys.length }) : t('Copy to…'), icon: 'layers', onClick: () => targetMenu(anchor, panel, keys, false) },
+    { label: many ? t('Move {n} to…', { n: keys.length }) : t('Move to…'), icon: 'layers', onClick: () => targetMenu(anchor, panel, keys, true), disabled: panel.readOnly },
     'sep',
-    { label: panel.kind === 'stremio' ? 'Verifica e aggiorna manifest' : 'Verifica raggiungibilità', icon: 'refresh', onClick: () => runCheck(panel, keys) },
-    panel.kind === 'nuvio' ? { label: item.enabled ? 'Disattiva' : 'Attiva', icon: 'power', onClick: () => { panel.setEnabled(keys, !item.enabled); app.notifyPanel(panel); } } : null,
-    { label: many ? `Rimuovi ${keys.length}` : 'Rimuovi', icon: 'trash', danger: true, disabled: isProtected(item) && !many, hint: isProtected(item) ? 'Addon protetto' : undefined, onClick: () => removeKeys(panel, keys) },
+    { label: panel.kind === 'stremio' ? t('Check and update manifest') : t('Check reachability'), icon: 'refresh', onClick: () => runCheck(panel, keys) },
+    panel.kind === 'nuvio' ? { label: item.enabled ? t('Disable') : t('Enable'), icon: 'power', onClick: () => { panel.setEnabled(keys, !item.enabled); app.notifyPanel(panel); } } : null,
+    { label: many ? t('Remove {n}', { n: keys.length }) : t('Remove'), icon: 'trash', danger: true, disabled: isProtected(item) && !many, hint: isProtected(item) ? t('Protected addon') : undefined, onClick: () => removeKeys(panel, keys) },
   ].filter(Boolean));
 }
 
@@ -203,20 +204,20 @@ async function copyManifestJson(item) {
   let m = item.manifest;
   if (!m) {
     const r = await fetchManifest(item.url);
-    if (!r.ok) { toast(`Manifest non scaricabile: ${r.error}`, 'error'); return; }
+    if (!r.ok) { toast(t('Manifest cannot be downloaded: {error}', { error: r.error }), 'error'); return; }
     m = r.manifest;
   }
-  toast((await copyText(JSON.stringify(m, null, 2))) ? 'Manifest JSON copiato' : 'Copia non riuscita', 'ok', 2500);
+  toast((await copyText(JSON.stringify(m, null, 2))) ? t('Manifest JSON copied') : t('Copy failed'), 'ok', 2500);
 }
 
 async function runCheck(panel, keys) {
   const r = await app.checkItems(panel, keys);
-  if (r.skipped) toast('Salvataggio in corso: gli aggiornamenti trovati non sono stati applicati. Ripeti la verifica.', 'info');
-  const parts = [`${r.checked} verificati`];
-  if (panel.kind === 'stremio') parts.push(`${r.updated} aggiornati nella bozza`);
-  else if (r.updated) parts.push(`${r.updated} nomi aggiornati`);
-  if (r.failures) parts.push(`${r.failures} non raggiungibili`);
-  toast(parts.join(' · ') + (r.updated ? '. Salva per applicare.' : '.'), r.failures ? 'info' : 'ok');
+  if (r.skipped) toast(t('Saving in progress: the updates found were not applied. Run the check again.'), 'info');
+  const parts = [t('{n} checked', { n: r.checked })];
+  if (panel.kind === 'stremio') parts.push(t('{n} updated in the draft', { n: r.updated }));
+  else if (r.updated) parts.push(t('{n} names updated', { n: r.updated }));
+  if (r.failures) parts.push(t('{n} unreachable', { n: r.failures }));
+  toast(parts.join(' · ') + (r.updated ? t('. Save to apply.') : '.'), r.failures ? 'info' : 'ok');
 }
 
 // ---------- drag & drop ----------
@@ -347,7 +348,7 @@ function wireDrop(section, panel) {
       section.classList.remove('drop-target');
       const urls = extractUrls(e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain'));
       if (urls.length) openInstall(panel, { prefill: urls.map((url) => ({ url, enabled: true })) });
-      else toast('Nel contenuto trascinato non c\'è un URL di addon.', 'error');
+      else toast(t('There is no addon URL in the dragged content.'), 'error');
       return;
     }
     if (!list()) return;
@@ -443,7 +444,7 @@ function changeSummary(panel) {
   if (d.added.length) bits.push(h('span', { class: 'chg add' }, `+${d.added.length}`));
   if (d.removed.length) bits.push(h('span', { class: 'chg del' }, `−${d.removed.length}`));
   if (d.modified.length) bits.push(h('span', { class: 'chg mod' }, `~${d.modified.length}`));
-  if (d.reordered) bits.push(h('span', { class: 'chg ord' }, '↕ ordine'));
+  if (d.reordered) bits.push(h('span', { class: 'chg ord' }, t('↕ order')));
   return h('span', { class: 'changes' }, ...bits);
 }
 
@@ -453,27 +454,27 @@ function panelMenu(anchor, panel) {
   const at = state.accounts.indexOf(acc);
   const many = state.accounts.length > 1;
   menu(anchor, [
-    many ? { label: 'Sposta account prima', hint: 'Sposta tutti i pannelli di questo account', disabled: at <= 0, onClick: () => app.moveAccountBy(acc, -1) } : null,
-    many ? { label: 'Sposta account dopo', hint: 'Sposta tutti i pannelli di questo account', disabled: at >= state.accounts.length - 1, onClick: () => app.moveAccountBy(acc, 1) } : null,
+    many ? { label: t('Move account before'), hint: t('Moves all the panels of this account'), disabled: at <= 0, onClick: () => app.moveAccountBy(acc, -1) } : null,
+    many ? { label: t('Move account after'), hint: t('Moves all the panels of this account'), disabled: at >= state.accounts.length - 1, onClick: () => app.moveAccountBy(acc, 1) } : null,
     many ? 'sep' : null,
-    { label: 'Aggiungi da URL…', icon: 'plus', onClick: () => openInstall(panel) },
-    { label: 'Importa da file…', icon: 'upload', onClick: () => openImport(panel) },
-    { label: 'Sincronizza da un altro pannello…', icon: 'layers', onClick: () => openMirror(panel) },
+    { label: t('Add from URL…'), icon: 'plus', onClick: () => openInstall(panel) },
+    { label: t('Import from file…'), icon: 'upload', onClick: () => openImport(panel) },
+    { label: t('Sync from another panel…'), icon: 'layers', onClick: () => openMirror(panel) },
     'sep',
-    { label: 'Ordina A → Z', icon: 'sort', onClick: () => { panel.sortByName(); app.notifyPanel(panel); } },
-    { label: all ? 'Deseleziona tutti' : 'Seleziona tutti', icon: 'check', onClick: () => { panel.selected = all ? new Set() : new Set(panel.items.filter(matches).map((i) => i.key)); app.notifyPanel(panel); } },
-    { label: panel.kind === 'stremio' ? 'Verifica e aggiorna tutti' : 'Verifica raggiungibilità di tutti', icon: 'refresh', onClick: () => runCheck(panel) },
+    { label: t('Sort A → Z'), icon: 'sort', onClick: () => { panel.sortByName(); app.notifyPanel(panel); } },
+    { label: all ? t('Deselect all') : t('Select all'), icon: 'check', onClick: () => { panel.selected = all ? new Set() : new Set(panel.items.filter(matches).map((i) => i.key)); app.notifyPanel(panel); } },
+    { label: panel.kind === 'stremio' ? t('Check and update all') : t('Check reachability of all'), icon: 'refresh', onClick: () => runCheck(panel) },
     'sep',
-    { label: 'Esporta questa lista…', icon: 'download', onClick: () => exportPanels([panel], `addon-manager-${panel.title.replace(/\W+/g, '-').toLowerCase()}.json`) },
-    { label: 'Copia tutti gli URL', icon: 'copy', onClick: () => copyUrl(panel.items.map((i) => i.url).join('\n'), `${panel.items.length} URL copiati`) },
+    { label: t('Export this list…'), icon: 'download', onClick: () => exportPanels([panel], `addon-manager-${panel.title.replace(/\W+/g, '-').toLowerCase()}.json`) },
+    { label: t('Copy all URLs'), icon: 'copy', onClick: () => copyUrl(panel.items.map((i) => i.url).join('\n'), t('{n} URLs copied', { n: panel.items.length })) },
     'sep',
-    { label: 'Ricarica dal server', icon: 'refresh', onClick: () => reloadPanel(panel) },
-    { label: 'Annulla tutte le modifiche', icon: 'undo', disabled: !panel.dirty, onClick: () => app.discardPanel(panel) },
+    { label: t('Reload from server'), icon: 'refresh', onClick: () => reloadPanel(panel) },
+    { label: t('Undo all changes'), icon: 'undo', disabled: !panel.dirty, onClick: () => app.discardPanel(panel) },
   ].filter(Boolean));
 }
 
 async function reloadPanel(panel) {
-  if (panel.dirty && !(await confirmDialog({ title: 'Scartare le modifiche?', body: `Le modifiche non salvate a «${panel.title}» andranno perse.`, confirm: 'Scarta e ricarica', danger: true }))) return;
+  if (panel.dirty && !(await confirmDialog({ title: t('Discard changes?'), body: t('Unsaved changes to “{title}” will be lost.', { title: panel.title }), confirm: t('Discard and reload'), danger: true }))) return;
   app.loadPanel(panel);
 }
 
@@ -485,32 +486,32 @@ function selectionBar(panel) {
   const act = (name, text, onClick, { danger = false, disabled = false, short = null, visible = text } = {}) => h('button', {
     type: 'button', class: `btn small${danger ? ' danger' : ''}`, title: text, 'aria-label': text, disabled: disabled || undefined, onClick,
   }, icon(name, 14), h('span', { class: 'lbl' }, ` ${visible}`), short ? h('span', { class: 'lbl-s' }, ` ${short}`) : null);
-  return h('div', { class: 'selbar', role: 'toolbar', 'aria-label': 'Azioni sulla selezione' },
-    h('strong', { class: 'selcount' }, h('span', { class: 'selicon' }, icon('check', 14)), `${keys.length}`, h('span', { class: 'lbl' }, ' selezionati')),
-    act('layers', 'Copia in…', (e) => targetMenu(e.currentTarget, panel, keys, false), { short: 'Copia' }),
-    act('move', 'Sposta in…', (e) => targetMenu(e.currentTarget, panel, keys, true), { disabled: panel.readOnly, short: 'Sposta' }),
-    act('link', 'Copia gli URL', () => copyUrl(only.map((i) => i.url).join('\n'), `${only.length} URL copiati`), { visible: 'URL' }),
-    panel.kind === 'nuvio' ? act('power', 'Attiva/Disattiva', () => { panel.setEnabled(keys, !only.every((i) => i.enabled)); app.notifyPanel(panel); }) : null,
-    act('trash', 'Rimuovi', () => removeKeys(panel, keys), { danger: true }),
-    h('button', { type: 'button', class: 'icon-btn', title: 'Deseleziona', 'aria-label': 'Deseleziona', onClick: () => { panel.selected = new Set(); app.notifyPanel(panel); } }, icon('x')));
+  return h('div', { class: 'selbar', role: 'toolbar', 'aria-label': t('Selection actions') },
+    h('strong', { class: 'selcount' }, h('span', { class: 'selicon' }, icon('check', 14)), `${keys.length}`, h('span', { class: 'lbl' }, ` ${t('selected')}`)),
+    act('layers', t('Copy to…'), (e) => targetMenu(e.currentTarget, panel, keys, false), { short: t('Copy') }),
+    act('move', t('Move to…'), (e) => targetMenu(e.currentTarget, panel, keys, true), { disabled: panel.readOnly, short: t('Move') }),
+    act('link', t('Copy the URLs'), () => copyUrl(only.map((i) => i.url).join('\n'), t('{n} URLs copied', { n: only.length })), { visible: 'URL' }),
+    panel.kind === 'nuvio' ? act('power', t('Enable/Disable'), () => { panel.setEnabled(keys, !only.every((i) => i.enabled)); app.notifyPanel(panel); }) : null,
+    act('trash', t('Remove'), () => removeKeys(panel, keys), { danger: true }),
+    h('button', { type: 'button', class: 'icon-btn', title: t('Deselect'), 'aria-label': t('Deselect'), onClick: () => { panel.selected = new Set(); app.notifyPanel(panel); } }, icon('x')));
 }
 
 function body(panel) {
   if (panel.readOnly) return h('div', { class: 'note' }, icon('lock', 16), h('span', null, panel.readOnlyReason));
-  if (panel.status === 'loading') return h('div', { class: 'note' }, h('span', { class: 'spinner' }), 'Caricamento…');
+  if (panel.status === 'loading') return h('div', { class: 'note' }, h('span', { class: 'spinner' }), t('Loading…'));
   if (panel.status === 'error') {
-    return h('div', { class: 'note error' }, icon('alert', 16), h('span', null, panel.error || 'Errore'),
-      h('button', { type: 'button', class: 'btn small', onClick: () => app.loadPanel(panel) }, 'Riprova'));
+    return h('div', { class: 'note error' }, icon('alert', 16), h('span', null, panel.error || t('Error')),
+      h('button', { type: 'button', class: 'btn small', onClick: () => app.loadPanel(panel) }, t('Retry')));
   }
   const rows = panel.items.map((it, n) => buildRow(panel, it, n));
-  const list = h('ul', { class: 'plist', role: 'list', 'aria-label': `Addon di ${panel.title}` }, ...rows);
+  const list = h('ul', { class: 'plist', role: 'list', 'aria-label': t('Addons of {title}', { title: panel.title }) }, ...rows);
   if (!panel.items.length) {
-    return h('div', { class: 'plist empty' }, h('p', null, 'Nessun addon.'),
+    return h('div', { class: 'plist empty' }, h('p', null, t('No addons.')),
       h('p', { class: 'muted' },
-        pc('Trascina qui degli addon da un altro pannello oppure usa «+».'),
-        touch('Aggiungi addon con «+», oppure copiali da un altro pannello con ⋯ → «Copia in…».')));
+        pc(t('Drag addons here from another panel or use “+”.')),
+        touch(t('Add addons with “+”, or copy them from another panel with ⋯ → “Copy to…”.'))));
   }
-  if (filterText && !rows.some((r) => !r.hidden)) list.append(h('li', { class: 'note muted' }, 'Nessun addon corrisponde alla ricerca.'));
+  if (filterText && !rows.some((r) => !r.hidden)) list.append(h('li', { class: 'note muted' }, t('No addon matches the search.')));
   return list;
 }
 
@@ -525,24 +526,24 @@ function buildPanel(panel) {
   h('div', { class: 'pstick' },
   h('header', { class: 'phead' },
     kindLogo(panel.kind),
-    h('div', { class: 'ptitle' }, h('strong', null, panel.title), h('small', null, panel.kind === 'nuvio' ? `${app.accountOf(panel)?.label} · profilo ${panel.profile}` : panel.subtitle)),
+    h('div', { class: 'ptitle' }, h('strong', null, panel.title), h('small', null, panel.kind === 'nuvio' ? t('{account} · profile {n}', { account: app.accountOf(panel)?.label, n: panel.profile }) : panel.subtitle)),
     h('div', { class: 'pbtns' },
-      iconButton('undo', 'Annulla', () => { panel.undo(); app.notifyPanel(panel); }, { title: 'Annulla (Ctrl+Z)', disabled: !panel.canUndo || undefined }),
-      iconButton('redo', 'Ripeti', () => { panel.redo(); app.notifyPanel(panel); }, { title: 'Ripeti (Ctrl+Maiusc+Z)', disabled: !panel.canRedo || undefined }),
-      iconButton('plus', 'Aggiungi da URL', () => openInstall(panel), { disabled: !usable || undefined }),
-      iconButton('more', 'Menu pannello', (e) => panelMenu(e.currentTarget, panel), { disabled: !usable || undefined }),
-      iconButton('chevron', collapsed ? 'Espandi' : 'Comprimi', () => { app.toggleCollapsed(panel.id); app.notifyPanel(panel); }, { 'aria-expanded': String(!collapsed) }))),
+      iconButton('undo', t('Undo'), () => { panel.undo(); app.notifyPanel(panel); }, { title: t('Undo (Ctrl+Z)'), disabled: !panel.canUndo || undefined, dataset: { act: 'undo' } }),
+      iconButton('redo', t('Redo'), () => { panel.redo(); app.notifyPanel(panel); }, { title: t('Redo (Ctrl+Shift+Z)'), disabled: !panel.canRedo || undefined, dataset: { act: 'redo' } }),
+      iconButton('plus', t('Add from URL'), () => openInstall(panel), { disabled: !usable || undefined }),
+      iconButton('more', t('Panel menu'), (e) => panelMenu(e.currentTarget, panel), { disabled: !usable || undefined }),
+      iconButton('chevron', collapsed ? t('Expand') : t('Collapse'), () => { app.toggleCollapsed(panel.id); app.notifyPanel(panel); }, { 'aria-expanded': String(!collapsed) }))),
   collapsed ? null : h('div', { class: 'pbar' },
     h('span', { class: 'count' }, filterText ? `${panel.items.filter(matches).length} / ${panel.items.length} addon` : `${panel.items.length} addon`),
     changeSummary(panel),
     h('span', { class: 'spacer' }),
-    panel.dirty ? h('button', { type: 'button', class: 'btn small', onClick: () => app.discardPanel(panel) }, 'Annulla') : null,
+    panel.dirty ? h('button', { type: 'button', class: 'btn small', onClick: () => app.discardPanel(panel) }, t('Cancel')) : null,
     panel.dirty ? h('button', { type: 'button', class: 'btn small primary', disabled: panel.status === 'saving', onClick: () => app.savePanel(panel) },
-      icon('save', 14), panel.status === 'saving' ? ' Salvataggio…' : ' Salva') : null),
+      icon('save', 14), ` ${panel.status === 'saving' ? t('Saving…') : t('Save')}`) : null),
   !collapsed && panel.selected.size ? selectionBar(panel) : null),
   collapsed ? null : body(panel));
   wireDrop(section, panel);
-  makeAccountDraggable(section.querySelector('.phead'), panel.accountId, 'Trascina per spostare l\'account');
+  makeAccountDraggable(section.querySelector('.phead'), panel.accountId, t('Drag to move the account'));
   panelAccountTarget(section, panel.accountId);
   return section;
 }
@@ -572,12 +573,12 @@ function accountCard(acc) {
       kindLogo(acc.kind),
       h('div', { class: 'ptitle' }, h('strong', null, acc.label), h('small', null, acc.email))),
     acc.status === 'connecting' || acc.status === 'idle'
-      ? h('div', { class: 'note' }, h('span', { class: 'spinner' }), 'Connessione…')
-      : h('div', { class: `note ${auth ? '' : 'error'}` }, icon(auth ? 'lock' : 'alert', 16), h('span', null, acc.error || (auth ? 'Accesso richiesto.' : 'Errore')),
-        auth ? h('button', { type: 'button', class: 'btn small primary', onClick: () => openLogin({ account: acc }) }, 'Accedi')
-          : h('button', { type: 'button', class: 'btn small', onClick: () => app.reloadAccount(acc) }, 'Riprova')),
-    h('div', { class: 'note' }, h('button', { type: 'button', class: 'btn small', onClick: () => removeAcc(acc) }, 'Rimuovi account')));
-  makeAccountDraggable(card.querySelector('.phead'), acc.id, 'Trascina per spostare l\'account');
+      ? h('div', { class: 'note' }, h('span', { class: 'spinner' }), t('Connecting…'))
+      : h('div', { class: `note ${auth ? '' : 'error'}` }, icon(auth ? 'lock' : 'alert', 16), h('span', null, acc.error || (auth ? t('Sign-in required.') : t('Error'))),
+        auth ? h('button', { type: 'button', class: 'btn small primary', onClick: () => openLogin({ account: acc }) }, t('Sign in'))
+          : h('button', { type: 'button', class: 'btn small', onClick: () => app.reloadAccount(acc) }, t('Retry'))),
+    h('div', { class: 'note' }, h('button', { type: 'button', class: 'btn small', onClick: () => removeAcc(acc) }, t('Remove account'))));
+  makeAccountDraggable(card.querySelector('.phead'), acc.id, t('Drag to move the account'));
   panelAccountTarget(card, acc.id);
   return card;
 }
@@ -585,9 +586,9 @@ function accountCard(acc) {
 async function removeAcc(acc) {
   const dirty = acc.panelIds.some((id) => state.panels.get(id)?.dirty);
   const ok = await confirmDialog({
-    title: `Rimuovere ${acc.label}?`, danger: true, confirm: 'Rimuovi',
-    body: h('div', null, h('p', null, 'L\'account viene scollegato da questo browser e il token di sessione invalidato (solo per questa sessione: le altre app restano collegate).'),
-      dirty ? h('p', { class: 'warn-text' }, 'Ci sono modifiche non salvate che andranno perse.') : null),
+    title: t('Remove {name}?', { name: acc.label }), danger: true, confirm: t('Remove'),
+    body: h('div', null, h('p', null, t('The account is disconnected from this browser and its session token is invalidated (only this session: your other apps stay connected).')),
+      dirty ? h('p', { class: 'warn-text' }, t('There are unsaved changes that will be lost.')) : null),
   });
   if (ok) await app.removeAccount(acc);
 }
@@ -596,19 +597,19 @@ function accountChip(acc) {
   const dirty = acc.panelIds.some((id) => state.panels.get(id)?.dirty);
   const at = state.accounts.indexOf(acc);
   const last = state.accounts.length - 1;
-  const status = acc.status === 'ready' ? 'connesso' : acc.status === 'auth' ? 'accesso richiesto' : acc.status === 'error' ? 'errore' : 'connessione…';
+  const status = acc.status === 'ready' ? t('connected') : acc.status === 'auth' ? t('sign-in required') : acc.status === 'error' ? t('error') : t('connecting…');
   const chip = h('button', {
     type: 'button', class: `chip-acc ${acc.kind} ${acc.status}`, 'aria-haspopup': 'menu',
     title: `${acc.email} — ${status}`,
     onClick: (e) => menu(e.currentTarget, [
-      { label: 'Ricarica', icon: 'refresh', onClick: () => reloadAccount(acc) },
-      { label: 'Rinomina…', icon: 'user', onClick: async () => { const v = await promptDialog({ title: 'Rinomina account', value: acc.label }); if (v !== undefined) app.renameAccount(acc, v); } },
-      acc.status === 'auth' ? { label: 'Accedi di nuovo…', icon: 'lock', onClick: () => openLogin({ account: acc }) } : null,
+      { label: t('Reload'), icon: 'refresh', onClick: () => reloadAccount(acc) },
+      { label: t('Rename…'), icon: 'user', onClick: async () => { const v = await promptDialog({ title: t('Rename account'), value: acc.label }); if (v !== undefined) app.renameAccount(acc, v); } },
+      acc.status === 'auth' ? { label: t('Sign in again…'), icon: 'lock', onClick: () => openLogin({ account: acc }) } : null,
       state.accounts.length > 1 ? 'sep' : null,
-      state.accounts.length > 1 ? { label: 'Sposta prima', disabled: at <= 0, onClick: () => app.moveAccountBy(acc, -1) } : null,
-      state.accounts.length > 1 ? { label: 'Sposta dopo', disabled: at >= last, onClick: () => app.moveAccountBy(acc, 1) } : null,
+      state.accounts.length > 1 ? { label: t('Move before'), disabled: at <= 0, onClick: () => app.moveAccountBy(acc, -1) } : null,
+      state.accounts.length > 1 ? { label: t('Move after'), disabled: at >= last, onClick: () => app.moveAccountBy(acc, 1) } : null,
       'sep',
-      { label: 'Rimuovi account…', icon: 'logout', danger: true, onClick: () => removeAcc(acc) },
+      { label: t('Remove account…'), icon: 'logout', danger: true, onClick: () => removeAcc(acc) },
     ].filter(Boolean)),
     // Alt + frecce: sposta l'account (sinistra/su = prima, destra/giù = dopo)
     onKeyDown: (e) => {
@@ -619,7 +620,7 @@ function accountChip(acc) {
       app.moveAccountBy(acc, d);
     },
   }, h('span', { class: 'status-dot' }), kindLogo(acc.kind, 18),
-  h('span', { class: 'chip-label' }, acc.label), dirty ? h('span', { class: 'chip-dirty', title: 'Modifiche non salvate' }, '●') : null);
+  h('span', { class: 'chip-label' }, acc.label), dirty ? h('span', { class: 'chip-dirty', title: t('Unsaved changes') }, '●') : null);
 
   // Il contenitore è trascinabile (Firefox non permette di trascinare direttamente un <button>)
   const wrap = h('div', { class: 'chip-wrap', dataset: { acc: acc.id } }, chip);
@@ -641,7 +642,7 @@ export function renderAccounts(strip) {
 
 async function reloadAccount(acc) {
   if (acc.panelIds.some((id) => state.panels.get(id)?.dirty) &&
-    !(await confirmDialog({ title: 'Scartare le modifiche?', body: 'Ricaricando l\'account le modifiche non salvate andranno perse.', confirm: 'Scarta e ricarica', danger: true }))) return;
+    !(await confirmDialog({ title: t('Discard changes?'), body: t('If you reload the account, unsaved changes will be lost.'), confirm: t('Discard and reload'), danger: true }))) return;
   app.reloadAccount(acc);
 }
 
@@ -661,9 +662,9 @@ export function updateSaveAll() {
   saveAllBtn.disabled = n === 0;
   fill(saveAllBtn,
     icon('save', 16),
-    h('span', { class: 'lbl' }, n ? `Salva tutto (${n})` : 'Salva tutto'),
+    h('span', { class: 'lbl' }, n ? t('Save all ({n})', { n }) : t('Save all')),
     n ? h('span', { class: 'count-badge', 'aria-hidden': 'true' }, String(n)) : null);
-  saveAllBtn.title = n ? `Salva tutto (${n} ${n === 1 ? 'lista modificata' : 'liste modificate'})` : 'Salva tutto';
+  saveAllBtn.title = n ? (n === 1 ? t('Save all (1 modified list)') : t('Save all ({n} modified lists)', { n })) : t('Save all');
   renderAccounts(stripEl);
 }
 
@@ -692,14 +693,15 @@ export function renderBoard() {
 function emptyState() {
   return h('div', { class: 'empty-state' },
     h('img', { class: 'empty-logo', src: 'img/logo.svg', alt: '', width: 72, height: 72 }),
-    h('h2', null, 'Gestisci gli addon di tutti i tuoi account'),
-    h('p', null, 'Aggiungi uno o più account Stremio e Nuvio, poi copia e sposta gli addon tra le liste, riordinali e salva quando sei pronto.'),
-    h('button', { type: 'button', class: 'btn primary large', onClick: () => openLogin() }, icon('plus', 16), ' Aggiungi il primo account'),
+    h('h2', null, t('Manage the addons of all your accounts')),
+    h('p', null, t('Add one or more Stremio and Nuvio accounts, then copy and move addons between the lists, reorder them and save when you are ready.')),
+    h('button', { type: 'button', class: 'btn primary large', onClick: () => openLogin() }, icon('plus', 16), ` ${t('Add your first account')}`),
     h('ul', { class: 'tips' },
-      h('li', null, pc('Le modifiche restano una bozza finché non premi «Salva».'), touch('Le modifiche restano una bozza finché non tocchi «Salva».')),
+      h('li', null, pc(t('Changes stay a draft until you press “Save”.')), touch(t('Changes stay a draft until you tap “Save”.'))),
       h('li', null,
-        pc('Trascina un addon in un\'altra lista per copiarlo; tieni premuto ', h('kbd', null, 'Maiusc'), ' mentre lo rilasci per spostarlo.'),
-        touch('Tocca ⋯ accanto a un addon e scegli «Copia in…» o «Sposta in…» per portarlo in un altro account.')),
-      h('li', null, touch('Riordina con le frecce ↑ ↓ accanto a ogni addon.'), pc('Riordina trascinando, oppure con ', h('kbd', null, 'Alt'), ' + ', h('kbd', null, '↑'), ' / ', h('kbd', null, '↓'), '.')),
-      h('li', null, 'Le password non vengono salvate.')));
+        pc(t('Drag an addon into another list to copy it; hold '), h('kbd', null, t('Shift')), t(' while you drop it to move it.')),
+        touch(t('Tap ⋯ next to an addon and choose “Copy to…” or “Move to…” to bring it to another account.'))),
+      h('li', null, touch(t('Reorder with the ↑ ↓ arrows next to each addon.')), pc(t('Reorder by dragging, or with '), h('kbd', null, 'Alt'), ' + ', h('kbd', null, '↑'), ' / ', h('kbd', null, '↓'), '.')),
+      h('li', null, t('Passwords are not saved.'))),
+    languageSection({ small: true, className: 'empty-lang' }));
 }

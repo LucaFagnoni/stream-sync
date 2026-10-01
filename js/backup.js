@@ -1,6 +1,7 @@
 // Esportazione / importazione liste di addon. Pure, testabili.
 
 import { extractUrls, idOf } from './util.js';
+import { t } from './i18n.js';
 
 const slim = (i) => ({ url: i.url, name: i.name, enabled: i.enabled !== false });
 
@@ -25,7 +26,7 @@ export function parseImport(text) {
   if (json && Array.isArray(json.lists)) {
     return json.lists
       .map((l) => ({
-        title: [l.account, l.title].filter(Boolean).join(' · ') || 'Lista',
+        title: [l.account, l.title].filter(Boolean).join(' · ') || t('List'),
         items: (Array.isArray(l.addons) ? l.addons : [])
           .filter((a) => a && typeof a.url === 'string')
           .map((a) => ({ url: a.url, name: a.name, enabled: a.enabled !== false })),
@@ -33,7 +34,7 @@ export function parseImport(text) {
       .filter((l) => l.items.length);
   }
   const urls = extractUrls(text);
-  return urls.length ? [{ title: 'URL trovati nel file', items: urls.map((url) => ({ url, enabled: true })) }] : [];
+  return urls.length ? [{ title: t('URLs found in the file'), items: urls.map((url) => ({ url, enabled: true })) }] : [];
 }
 
 export function dedupe(items) {

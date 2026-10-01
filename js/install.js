@@ -70,7 +70,7 @@ export function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   const policy = globalThis.trustedTypes?.createPolicy?.('addon-manager-sw', {
     createScriptURL: (url) => {
-      if (url !== 'sw.js') throw new TypeError('URL del service worker non consentito');
+      if (url !== 'sw.js') throw new TypeError('Service worker URL not allowed');
       return url;
     },
   });

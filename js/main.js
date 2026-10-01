@@ -1,5 +1,6 @@
 import * as app from './app.js';
-import { h, icon, toast, confirmDialog, closeMenu } from './ui/dom.js';
+import { t, getLang, setLang, applyStatic, onLangChange, LANGUAGES } from './i18n.js';
+import { h, icon, toast, menu, closeMenu } from './ui/dom.js';
 import { mountBoard, renderBoard, renderPanel, setFilter, updateSaveAll } from './ui/views.js';
 import { openLogin, openBackups, confirmSave, confirmConflict } from './ui/dialogs.js';
 import { initInstall, registerServiceWorker } from './install.js';
@@ -12,10 +13,12 @@ const $ = (id) => document.getElementById(id);
 // se la pagina è dentro un iframe altrui non si carica nessun account.
 if (window.top !== window.self) {
   document.body.replaceChildren(h('main', { class: 'framed' },
-    h('p', null, 'Per sicurezza Addon Manager non funziona dentro un\'altra pagina.'),
-    h('a', { href: location.href, target: '_top', rel: 'noopener' }, 'Apri Addon Manager direttamente')));
+    h('p', null, t('For security, Addon Manager does not work inside another page.')),
+    h('a', { href: location.href, target: '_top', rel: 'noopener' }, t('Open Addon Manager directly'))));
   throw new Error('Addon Manager: caricamento in un frame bloccato');
 }
+
+applyStatic();
 
 // ---------- tema ----------
 const root = document.documentElement;
@@ -39,20 +42,37 @@ app.on('panel', renderPanel);
 app.on('accounts', updateSaveAll);
 
 // Sui telefoni i pulsanti della barra mostrano solo l'icona (il testo .lbl si nasconde via CSS).
-$('backup').replaceChildren(icon('download', 16), h('span', { class: 'lbl' }, 'Backup'));
-$('add-account').replaceChildren(icon('plus', 16), h('span', { class: 'lbl' }, 'Account'));
-
 // Il suggerimento "( / )" ha senso solo dove c'è una tastiera.
 const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
-const setPlaceholder = () => { $('search').placeholder = finePointer.matches ? 'Cerca in tutte le liste  ( / )' : 'Cerca in tutte le liste'; };
-setPlaceholder();
-finePointer.addEventListener('change', setPlaceholder);
+function renderChrome() {
+  $('backup').replaceChildren(icon('download', 16), h('span', { class: 'lbl' }, t('Backup')));
+  $('add-account').replaceChildren(icon('plus', 16), h('span', { class: 'lbl' }, t('Account')));
+  $('lang').textContent = getLang().toUpperCase();
+  $('search').placeholder = finePointer.matches ? t('Search all lists  ( / )') : t('Search all lists');
+}
+renderChrome();
+finePointer.addEventListener('change', renderChrome);
+
+// ---------- lingua ----------
+// La scelta è salvata (js/i18n.js) e vale anche alla visita successiva; cambiandola si ridisegna tutto.
+$('lang').addEventListener('click', (e) => menu(e.currentTarget, [
+  { heading: t('Language') },
+  ...Object.entries(LANGUAGES).map(([code, l]) => ({
+    label: l.name, icon: code === getLang() ? 'check' : null, onClick: () => setLang(code),
+  })),
+]));
+onLangChange(() => {
+  closeMenu();
+  renderChrome();
+  applyTheme();
+  app.notifyBoard();
+});
 
 $('add-account').addEventListener('click', () => openLogin());
 $('backup').addEventListener('click', () => openBackups());
 $('save-all').addEventListener('click', async () => {
   const n = await app.saveAll();
-  if (n > 1) toast(`${n} liste salvate.`, 'ok');
+  if (n > 1) toast(t('{n} lists saved.', { n }), 'ok');
 });
 $('search').addEventListener('input', (e) => setFilter(e.target.value));
 

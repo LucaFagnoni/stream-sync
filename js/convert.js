@@ -3,6 +3,7 @@
 import { makeItem } from './model.js';
 import { toManifestUrl, hostOf, str } from './util.js';
 import { fetchManifest } from './manifest.js';
+import { t } from './i18n.js';
 
 /**
  * Crea una copia di `item` adatta all'account `kind` di destinazione.
@@ -13,7 +14,7 @@ export async function convertItem(item, kind, { fetcher = fetchManifest } = {}) 
   if (kind === 'nuvio') {
     // Es. "Local Files" di Stremio (127.0.0.1:11470): esiste solo dentro l'app Stremio.
     if (/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(hostOf(url))) {
-      throw new Error('addon locale di Stremio, non utilizzabile su Nuvio');
+      throw new Error(t('local Stremio addon, cannot be used on Nuvio'));
     }
     return makeItem({
       url,

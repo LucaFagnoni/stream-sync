@@ -2,8 +2,8 @@
   "id": "/",
   "name": "Addon Manager",
   "short_name": "Addon Manager",
-  "description": "Gestisci, riordina, aggiorna e copia gli addon dei tuoi account Stremio e Nuvio.",
-  "lang": "it",
+  "description": "Manage, reorder, update and copy the addons of your Stremio and Nuvio accounts.",
+  "lang": "en",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -39,14 +39,14 @@
       "sizes": "1360x640",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "Un account Stremio e due profili Nuvio affiancati"
+      "label": "A Stremio account and two Nuvio profiles side by side"
     },
     {
       "src": "img/screenshot-narrow.png",
       "sizes": "780x1560",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "Su telefono i pannelli sono uno sotto l'altro"
+      "label": "On phones the panels are stacked one below the other"
     }
   ]
 }

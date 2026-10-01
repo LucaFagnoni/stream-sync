@@ -8,6 +8,7 @@ import {
 } from './model.js';
 import { convertItem } from './convert.js';
 import { fetchManifest } from './manifest.js';
+import { t } from './i18n.js';
 import { loadStore, saveStore, pushBackup, readSession, readRemoved, deleteBackupsFor, clearAll, STORE_KEY } from './store.js';
 import { uid, pLimit, hashString, stableStringify, idOf, str, toManifestUrl, moveInArray, shownName } from './util.js';
 
@@ -37,12 +38,12 @@ export const setHooks = (h) => Object.assign(hooks, h);
 // ---------- helper ----------
 export function explain(e) {
   const m = String(e?.message || e || '');
-  if (/invalid login credentials/i.test(m)) return 'Email o password non corrette.';
-  if (/user not found/i.test(m)) return 'Account non trovato.';
-  if (/wrong passphrase|wrong password/i.test(m)) return 'Password errata.';
-  if (/too many requests|rate limit/i.test(m)) return 'Troppe richieste: riprova tra poco.';
-  if (/email not confirmed/i.test(m)) return 'Email non ancora confermata.';
-  return m || 'Errore sconosciuto.';
+  if (/invalid login credentials/i.test(m)) return t('Incorrect email or password.');
+  if (/user not found/i.test(m)) return t('Account not found.');
+  if (/wrong passphrase|wrong password/i.test(m)) return t('Wrong password.');
+  if (/too many requests|rate limit/i.test(m)) return t('Too many requests: try again shortly.');
+  if (/email not confirmed/i.test(m)) return t('Email not confirmed yet.');
+  return m || t('Unknown error.');
 }
 
 export const accountOf = (panel) => state.accounts.find((a) => a.id === panel.accountId);
@@ -83,7 +84,7 @@ function onStorage(e) {
   if (e.key !== STORE_KEY && e.key !== null) return; // null: localStorage.clear()
   if (e.newValue == null) {
     if (state.accounts.length) {
-      hooks.toast('Dati cancellati da un\'altra scheda: uscita da tutti gli account anche qui.', 'info');
+      hooks.toast(t('Data cleared from another tab: signed out of all accounts here too.'), 'info');
       forgetEverything();
     }
     return;
@@ -108,7 +109,7 @@ function onStorage(e) {
 // ---------- accesso remoto (per tipo) ----------
 async function fetchRemote(panel) {
   const acc = accountOf(panel);
-  if (!acc?.session) throw new Error('Account non collegato.');
+  if (!acc?.session) throw new Error(t('Account not connected.'));
   if (acc.kind === 'stremio') {
     const { addons } = await Stremio.getAddons(acc.session.authKey);
     const template = addons.find((a) => 'transportName' in a)?.transportName;
@@ -129,7 +130,7 @@ async function pushRemote(panel, items, template) {
 
 function markAuthLost(acc) {
   acc.status = 'auth';
-  acc.error = 'Sessione scaduta: accedi di nuovo.';
+  acc.error = t('Session expired: sign in again.');
   acc.session = null;
   persist();
   // I pannelli "puliti" non servono più; quelli con bozza restano visibili così il lavoro non sparisce.
@@ -179,7 +180,7 @@ export async function connectAccount(acc) {
         id: `${acc.id}:${pr.index}`, accountId: acc.id, kind: 'nuvio', profile: pr.index,
         title: pr.name, subtitle: acc.email, color: pr.color || '#1e88e5',
         readOnly: pr.usesPrimary,
-        readOnlyReason: 'Questo profilo usa gli addon del Profilo 1: modificali da lì.',
+        readOnlyReason: t('This profile uses the addons of Profile 1: edit them there.'),
       }));
       for (const p of panels) state.panels.set(p.id, p);
       acc.panelIds = panels.map((p) => p.id);
@@ -220,7 +221,7 @@ async function authenticate(kind, email, password) {
 export async function addAccount({ kind, email, password, label, remember }) {
   email = email.trim();
   if (state.accounts.some((a) => a.kind === kind && a.email.toLowerCase() === email.toLowerCase())) {
-    throw new Error('Questo account è già stato aggiunto.');
+    throw new Error(t('This account has already been added.'));
   }
   const session = await authenticate(kind, email, password);
   const acc = makeAccount({ kind, email, label: label.trim() || email, remember, session });
@@ -318,7 +319,7 @@ export async function savePanel(panel) {
     if (same(remote.items, panel.items)) {
       panel.template = remote.template;
       panel.load(remote.items);
-      hooks.toast(`«${panel.title}» era già aggiornato sul server.`, 'ok');
+      hooks.toast(t('“{title}” was already up to date on the server.', { title: panel.title }), 'ok');
       return true;
     }
 
@@ -328,7 +329,7 @@ export async function savePanel(panel) {
       if (choice === 'reload') {
         panel.template = remote.template;
         panel.load(remote.items);
-        hooks.toast('Lista ricaricata dal server: le tue modifiche sono state scartate.', 'info');
+        hooks.toast(t('List reloaded from the server: your changes were discarded.'), 'info');
         return false;
       }
       if (choice === 'merge') {
@@ -345,7 +346,7 @@ export async function savePanel(panel) {
     if (same(toPush, remote.items)) {
       panel.template = remote.template;
       panel.load(remote.items);
-      hooks.toast(`«${panel.title}»: nessuna modifica da scrivere.`, 'info');
+      hooks.toast(t('“{title}”: no changes to write.', { title: panel.title }), 'info');
       return true;
     }
 
@@ -363,14 +364,14 @@ export async function savePanel(panel) {
     const fresh = await fetchRemote(panel);
     panel.template = fresh.template;
     panel.load(fresh.items);
-    if (same(fresh.items, toPush)) hooks.toast(`Salvato: ${panel.title}`, 'ok');
-    else hooks.toast(`«${panel.title}» è stato salvato, ma il server ora mostra una lista diversa da quella inviata: controllala.`, 'error');
+    if (same(fresh.items, toPush)) hooks.toast(t('Saved: {title}', { title: panel.title }), 'ok');
+    else hooks.toast(t('“{title}” was saved, but the server now shows a different list from the one sent: check it.', { title: panel.title }), 'error');
     return true;
   } catch (e) {
     panel.status = 'ready';
     panel.error = '';
     if (e.expired) markAuthLost(acc);
-    hooks.toast(`Salvataggio non riuscito (${panel.title}): ${explain(e)}`, 'error');
+    hooks.toast(t('Save failed ({title}): {error}', { title: panel.title, error: explain(e) }), 'error');
     return false;
   } finally {
     notifyPanel(panel);
@@ -402,8 +403,8 @@ const convertLimit = pLimit(4);
  */
 export async function copyItems(src, keys, dst, index, { move = false } = {}) {
   const res = { added: 0, skipped: 0, failed: [], removed: 0, blocked: 0 };
-  if (dst.readOnly) { hooks.toast(dst.readOnlyReason || 'Pannello in sola lettura.', 'error'); return res; }
-  if (dst.status !== 'ready') { hooks.toast('Il pannello di destinazione non è pronto (caricamento o salvataggio in corso).', 'error'); return res; }
+  if (dst.readOnly) { hooks.toast(dst.readOnlyReason || t('Read-only panel.'), 'error'); return res; }
+  if (dst.status !== 'ready') { hooks.toast(t('The destination panel is not ready (loading or saving in progress).'), 'error'); return res; }
 
   const set = new Set(keys);
   const items = src.items.filter((i) => set.has(i.key));
@@ -419,7 +420,7 @@ export async function copyItems(src, keys, dst, index, { move = false } = {}) {
   // Durante la conversione (asincrona) la destinazione può essere cambiata.
   const ok = converted.filter((c) => c.out && !dst.has(c.out.url));
   if (ok.length && !dst.insert(ok.map((c) => c.out), index)) {
-    hooks.toast('La destinazione è in salvataggio: copia annullata, riprova tra un attimo.', 'error');
+    hooks.toast(t('The destination is being saved: copy cancelled, try again in a moment.'), 'error');
     return { ...res, failed: [] };
   }
   res.added = ok.length;
