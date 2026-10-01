@@ -237,3 +237,13 @@ textarea { resize: vertical; font: 12.5px ui-monospace, monospace; }
 }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+
+/* ---- invito all'installazione ---- */
+.install-banner { margin: 10px 16px 0; padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border)); border-radius: var(--radius); background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
+.install-inner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.install-logo { border-radius: 8px; flex: none; }
+.install-text { flex: 1 1 220px; display: flex; flex-direction: column; min-width: 0; }
+.install-text span { color: var(--muted); font-size: 12.5px; }
+.install-actions { display: flex; gap: 8px; margin-left: auto; }
+.steps { padding-left: 20px; display: grid; gap: 8px; margin: 10px 0 0; }
+@media (max-width: 720px) { .install-banner { margin: 10px 12px 0; } .install-actions { width: 100%; } .install-actions .btn { flex: 1; justify-content: center; } }

@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "name": "Addon Manager",
   "short_name": "Addon Manager",
   "description": "Gestisci, riordina, aggiorna e copia gli addon dei tuoi account Stremio e Nuvio.",
@@ -26,6 +27,26 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "categories": [
+    "utilities",
+    "productivity"
+  ],
+  "screenshots": [
+    {
+      "src": "img/screenshot-wide.png",
+      "sizes": "1360x640",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Un account Stremio e due profili Nuvio affiancati"
+    },
+    {
+      "src": "img/screenshot-narrow.png",
+      "sizes": "780x1560",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Su telefono i pannelli sono uno sotto l'altro"
     }
   ]
 }

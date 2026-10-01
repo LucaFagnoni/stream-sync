@@ -12,8 +12,4 @@
     <filter id="sh" x="-25%" y="-25%" width="150%" height="160%">
       <feDropShadow dx="0" dy="1.8" stdDeviation="1.6" flood-color="#1b1464" flood-opacity=".4"/>
     </filter>
-  </defs><rect width="64" height="64" rx="0" fill="url(#bg)"/><rect width="64" height="64" rx="0" fill="url(#gl)"/><mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
-       <rect width="64" height="64" fill="#fff"/><rect x="29" y="29.2" width="14" height="2.8" rx="1.4" fill="#000"/><rect x="29" y="34.8" width="11" height="2.8" rx="1.4" fill="#000"/><rect x="29" y="40.4" width="14" height="2.8" rx="1.4" fill="#000"/>
-     </mask>
-     <g transform="translate(32 32) scale(0.8960000000000001) translate(-34 -33.5)" stroke-linejoin="round">
-       <g filter="url(#sh)"><path d="M18 21 H25.3 A7.2 7.2 0 1 1 39.7 21 H47 V28.3 A7.2 7.2 0 1 1 47 42.7 V50 H40.4 A7.9 7.9 0 0 0 24.6 50 H18 V43.4 A7.9 7.9 0 0 0 18 27.6 V21Z" fill="url(#pc)" stroke="#fff" stroke-width="2.2" mask="url(#m)"/></g></g></svg>
+  </defs><rect width="64" height="64" rx="0" fill="url(#bg)"/><rect width="64" height="64" rx="0" fill="url(#gl)"/><g transform="translate(32 32) scale(0.8736000000000002) translate(-34 -33.5)" stroke-linejoin="round"><path d="M18 21 H25.3 A7.2 7.2 0 1 1 39.7 21 H47 V28.3 A7.2 7.2 0 1 1 47 42.7 V50 H40.4 A7.9 7.9 0 0 0 24.6 50 H18 V43.4 A7.9 7.9 0 0 0 18 27.6 V21Z" fill="url(#pc)" stroke="#fff" stroke-width="2.2" filter="url(#sh)"/></g></svg>

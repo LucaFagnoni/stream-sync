@@ -2,6 +2,8 @@ import * as app from './app.js';
 import { h, icon, toast, confirmDialog, closeMenu } from './ui/dom.js';
 import { mountBoard, renderBoard, renderPanel, setFilter, updateSaveAll } from './ui/views.js';
 import { openLogin, openBackups, confirmSave, confirmConflict } from './ui/dialogs.js';
+import { initInstall, registerServiceWorker } from './install.js';
+import { mountInstallBanner } from './ui/install-ui.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -92,6 +94,11 @@ addEventListener('beforeunload', (e) => {
 });
 
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+
+// ---------- installazione come app + uso senza rete ----------
+initInstall();
+mountInstallBanner($('install-banner'));
+registerServiceWorker();
 
 // ---------- avvio ----------
 await app.init();

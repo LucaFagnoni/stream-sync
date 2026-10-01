@@ -14,9 +14,9 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot.png" alt="Addon Manager su computer: un account Stremio e due profili Nuvio affiancati" width="680">
+  <img src="img/screenshot-wide.png" alt="Addon Manager su computer: un account Stremio e due profili Nuvio affiancati" width="680">
   &nbsp;
-  <img src="docs/screenshot-mobile.png" alt="Addon Manager su smartphone: i pannelli sono uno sotto l'altro" width="190">
+  <img src="img/screenshot-narrow.png" alt="Addon Manager su smartphone: i pannelli sono uno sotto l'altro" width="190">
 </p>
 
 ---
@@ -50,7 +50,7 @@ Addon Manager è un'applicazione web statica, senza backend: il browser comunica
 - Ogni modifica resta una **bozza locale**, con annulla/ripeti, finché non premi «Salva». Un riepilogo (`+2 −1 ~1 ↕`) mostra cosa cambierà.
 - **Sincronizza da…**: copia in una lista gli addon mancanti di un'altra, oppure rendila identica alla sorgente, con anteprima.
 - Importazione ed esportazione in JSON; backup automatico dello stato remoto prima di ogni salvataggio.
-- Tema chiaro e scuro; installabile come app sul telefono.
+- Tema chiaro e scuro; **installabile come app** su computer e telefono, con l'interfaccia disponibile anche senza connessione.
 
 ## Guida rapida
 
@@ -58,6 +58,17 @@ Addon Manager è un'applicazione web statica, senza backend: il browser comunica
 2. Scegli Stremio o Nuvio e accedi con email e password. Attiva «Ricordami» solo su un dispositivo personale.
 3. Organizza gli addon: copiali tra gli account, riordinali, aggiungili da URL. Finché non salvi, nulla cambia sui server.
 4. Premi **Salva** sulla colonna (o **Salva tutto**). Se rimuovi addon, ti viene chiesta una conferma con l'elenco.
+
+### Installazione come app (computer e telefono)
+
+Addon Manager si può installare: si apre in una finestra tutta sua, con la propria icona e senza barra del browser. L'interfaccia si carica anche senza connessione (per gestire gli addon serve comunque la rete).
+
+- **Chrome ed Edge (computer e Android):** in cima alla pagina compare l'invito «Installa Addon Manager»; resta disponibile anche in *Backup → Installa come app*. In alternativa c'è l'icona di installazione nella barra degli indirizzi. Il browser la propone solo dopo qualche istante di utilizzo.
+- **iPhone e iPad (Safari):** Condividi → «Aggiungi alla schermata Home». L'app non può farlo da sola: Safari non lo permette.
+- **Safari su Mac:** File → «Aggiungi al Dock…» (Safari 17 o successivi).
+- **Altri browser:** se supportano le app web, cerca «Installa app» o «Aggiungi alla schermata Home» nel menu.
+
+Con «Ricordami» spento la sessione dura finché l'app resta aperta: su un dispositivo personale conviene attivarlo. Gli aggiornamenti arrivano da soli: quando sei in linea l'app carica sempre i file più recenti.
 
 ### Scorciatoie da tastiera (computer)
 
@@ -85,8 +96,6 @@ Sugli schermi stretti i pannelli sono uno sotto l'altro e **scorre solo la pagin
 
 Il trascinamento con il dito non è previsto: su touch si usa il menu ⋯.
 
-**Installazione come app.** Dal menu del browser puoi aggiungere Addon Manager alla schermata Home (Chrome: «Installa app» / «Aggiungi a schermata Home»; Safari: Condividi → «Aggiungi alla schermata Home»). Aprendola dall'icona si apre senza la barra del browser. Con «Ricordami» spento la sessione dura finché l'app resta aperta: su un telefono personale conviene attivarlo.
-
 ## Sicurezza e privacy
 
 - **Credenziali.** La password serve solo a ottenere un token di sessione e non viene mai memorizzata. Il token viene conservato:
@@ -97,6 +106,7 @@ Il trascinamento con il dito non è previsto: su touch si usa il menu ⋯.
   - Content-Security-Policy restrittiva, con Trusted Types e `frame-ancestors 'none'`;
   - `X-Frame-Options`, `nosniff`, HSTS, `no-referrer`.
 - **Dati non fidati.** Nomi, descrizioni e loghi degli addon vengono trattati come testo non fidato, anche quando il manifest è malformato. Nessun `innerHTML` con dati esterni.
+- **Service worker.** Salva in cache solo i file statici dell'app. Non tocca le richieste verso Stremio, Nuvio e gli addon, né token o dati dell'utente. Con la rete disponibile serve sempre i file aggiornati; la copia in cache si usa solo offline.
 - **Nessun tracciamento.** Non ci sono analytics, cookie o risorse di terze parti: loghi e font sono locali o di sistema.
 - **URL degli addon.** Spesso contengono chiavi personali (per esempio `realdebrid=…`). Backup, esportazioni e «Copia tutti gli URL» le includono: trattali come dati riservati. Gli URL vengono salvati esattamente come sono stati inseriti, senza ricodifiche.
 
@@ -133,13 +143,15 @@ Entrambe le API consentono richieste cross-origin, quindi non serve alcun proxy.
 
 ```
 index.html, manifest.webmanifest   pagina e manifest per l'installazione come app
-css/, img/                         stili, logo e icone (SVG e PNG)
+sw.js                              service worker (interfaccia disponibile offline)
+css/, img/                         stili, logo, icone e screenshot per l'installazione
 js/util.js                         URL, hashing, concorrenza (senza DOM)
 js/stremio.js, nuvio.js            client delle API
 js/manifest.js                     download e validazione dei manifest
 js/model.js                        bozza, annulla/ripeti, diff, unione a tre vie
 js/convert.js, backup.js           conversione tra servizi, import/export
 js/store.js                        persistenza locale
+js/install.js                      installazione come app e registrazione del service worker
 js/app.js                          controller: account, caricamento, salvataggio, copia
 js/ui/                             componenti dell'interfaccia
 _headers                           intestazioni HTTP (Cloudflare Pages)

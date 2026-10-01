@@ -1,10 +1,14 @@
 # Intestazioni HTTP applicate da Cloudflare Pages (GitHub Pages non permette di impostarle).
 # Rispetto al <meta> CSP aggiungono frame-ancestors (anti-clickjacking a livello di server) e nosniff.
 /*
-  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https: http: data:; connect-src https: http:; base-uri 'none'; form-action 'none'; object-src 'none'; manifest-src 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types addon-manager-icons
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https: http: data:; connect-src https: http:; base-uri 'none'; form-action 'none'; object-src 'none'; manifest-src 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types addon-manager-icons addon-manager-sw
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   Cross-Origin-Opener-Policy: same-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
   Strict-Transport-Security: max-age=31536000
+
+# Il service worker non va mai servito da una copia vecchia
+/sw.js
+  Cache-Control: no-cache

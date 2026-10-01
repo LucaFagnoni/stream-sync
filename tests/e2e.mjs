@@ -112,8 +112,20 @@ const eq = (a, b, m) => assert(JSON.stringify(a) === JSON.stringify(b), `${m || 
 // ---------- esecuzione ----------
 const server = await serve(PORT);
 const browser = await chromium.launch();
-const context = await browser.newContext({ viewport: { width: 1500, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
-await installMocks(context);
+
+// Il service worker e l'evento REALE `beforeinstallprompt` renderebbero i test non deterministici (un invito che
+// compare a metà test sposta i layout; un service worker intercetta le richieste che i mock devono vedere):
+// nei test "generali" si bloccano. I test sull'installazione usano contesti dedicati.
+const newContext = async (opts = {}, { sw = false, installPrompt = false } = {}) => {
+  const ctx = await browser.newContext({ serviceWorkers: sw ? 'allow' : 'block', ...opts });
+  if (!installPrompt) {
+    await ctx.addInitScript(() => addEventListener('beforeinstallprompt', (e) => { if (!e.__synthetic) e.stopImmediatePropagation(); }, true));
+  }
+  await installMocks(ctx);
+  return ctx;
+};
+
+const context = await newContext({ viewport: { width: 1500, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
 db = freshDb();
 const page = await context.newPage();
 const errors = [];
@@ -160,7 +172,7 @@ await step('brand: nome, icone e manifest installabile accettati da Chromium (CS
   eq((await page.locator('.brand strong').innerText()).trim(), 'Addon Manager');
   assert(!/StreamSync/i.test(await page.locator('body').innerText()), 'resta il vecchio nome nella pagina');
   const links = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('link[rel]')].map((l) => [l.rel + (l.type ? ':' + l.type : ''), l.getAttribute('href')])));
-  eq([links.manifest, links['apple-touch-icon'], links['icon:image/svg+xml']], ['manifest.webmanifest', 'img/apple-touch-icon.png', 'img/favicon.svg']);
+  eq([links.manifest, links['apple-touch-icon'], links['icon:image/svg+xml']], ['manifest.webmanifest', 'img/apple-touch-icon.png', 'img/logo.svg']);
   // Il manifest viene scaricato dal browser (non dalla pagina): se la CSP lo bloccasse, getAppManifest riporterebbe errori
   const cdp = await context.newCDPSession(page);
   const man = await cdp.send('Page.getAppManifest');
@@ -168,7 +180,9 @@ await step('brand: nome, icone e manifest installabile accettati da Chromium (CS
   const m = JSON.parse(man.data);
   eq([m.name, m.short_name, m.display], ['Addon Manager', 'Addon Manager', 'standalone']);
   eq((await cdp.send('Page.getInstallabilityErrors')).installabilityErrors, [], 'l\'app non risulta installabile');
-  for (const icon of m.icons) { // ogni icona esiste ed è un PNG della dimensione dichiarata
+  eq(m.id, '/', 'identità dell\'app instabile');
+  assert(m.screenshots.some((x) => x.form_factor === 'wide') && m.screenshots.some((x) => x.form_factor === 'narrow'), 'servono screenshot per computer e telefono');
+  for (const icon of [...m.icons, ...m.screenshots]) { // ogni icona/screenshot esiste ed è un PNG della dimensione dichiarata
     const r = await page.request.get(new URL(icon.src, APP).href);
     assert(r.ok() && /image\/png/.test(r.headers()['content-type']), `icona non servita: ${icon.src}`);
     const buf = await r.body();
@@ -702,8 +716,7 @@ await step('dentro un iframe altrui (clickjacking) non carica account né chiama
 });
 
 await step('"Ricordami" spento: token solo in sessionStorage, sopravvive al reload ma non a una nuova scheda', async () => {
-  const ctx = await browser.newContext({ viewport: { width: 1300, height: 800 } });
-  await installMocks(ctx);
+  const ctx = await newContext({ viewport: { width: 1300, height: 800 } });
   const tab = await ctx.newPage();
   tab.on('pageerror', (e) => errors.push(`pageerror(tab): ${e.message}`));
   await tab.goto(APP);
@@ -747,8 +760,7 @@ const settle = async () => {
 await step('telefono: istruzioni per il tocco (niente Maiusc/Alt/trascina) e ricerca senza scorciatoia', async () => {
   db = freshDb();
   db.stremio.addons = Array.from({ length: 30 }, (_, n) => ({ transportUrl: `https://gen${n}.test/manifest.json`, manifest: manifestOf('g' + n, 'Addon generato ' + n), flags: {} }));
-  mctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-  await installMocks(mctx);
+  mctx = await newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   mpage = await mctx.newPage();
   mpage.on('pageerror', (e) => errors.push(`pageerror(telefono): ${e.message}`));
   mpage.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|net::ERR/.test(m.text())) errors.push(`console(telefono): ${m.text()} @ ${JSON.stringify(m.location())}`); });
@@ -875,6 +887,143 @@ await step('telefono: barra di selezione su una riga con le parole brevi; "Salva
   assert(!/null/.test(text) && /Salva tutto \(\d\)/.test(text), `testo del pulsante: ${JSON.stringify(text)}`);
   await mctx.close();
 });
+
+// ---------- installazione come app ----------
+const synthInstallPrompt = (pg) => pg.evaluate(() => {
+  const e = new Event('beforeinstallprompt', { cancelable: true });
+  Object.assign(e, { __synthetic: true, prompt: async () => { window.__prompted = (window.__prompted || 0) + 1; }, userChoice: Promise.resolve({ outcome: 'accepted' }) });
+  window.dispatchEvent(e);
+});
+
+let ictx; let ipage;
+await step('installazione: service worker registrato, attivo e che controlla la pagina; il browser la trova installabile', async () => {
+  db = freshDb();
+  ictx = await newContext({ viewport: { width: 1300, height: 800 } }, { sw: true });
+  ipage = await ictx.newPage();
+  ipage.on('pageerror', (e) => errors.push(`pageerror(installazione): ${e.message}`));
+  ipage.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|net::ERR/.test(m.text())) errors.push(`console(installazione): ${m.text()}`); });
+  await ipage.goto(APP);
+  await ipage.evaluate(() => navigator.serviceWorker.ready);          // registrato e attivo (Trusted Types incluso)
+  await ipage.reload();
+  assert(await ipage.evaluate(() => !!navigator.serviceWorker.controller), 'il service worker non controlla la pagina');
+  const cache = await ipage.evaluate(async () => (await (await caches.open('addon-manager-v1')).keys()).map((r) => new URL(r.url).pathname));
+  for (const f of ['/', '/js/main.js', '/js/ui/install-ui.js', '/css/styles.css', '/img/logo.svg', '/manifest.webmanifest']) assert(cache.includes(f), `non in cache: ${f}`);
+  const cdp = await ictx.newCDPSession(ipage);
+  eq((await cdp.send('Page.getAppManifest')).errors, []);
+  eq((await cdp.send('Page.getInstallabilityErrors')).installabilityErrors, [], 'non installabile con il service worker attivo');
+});
+
+await step('installazione: senza rete l\'interfaccia si apre dalla cache', async () => {
+  await ictx.setOffline(true);
+  await ipage.reload();
+  await ipage.locator('.empty-state').waitFor({ timeout: 8000 });
+  eq((await ipage.locator('.brand strong').innerText()).trim(), 'Addon Manager');
+  assert(await ipage.evaluate(() => [...document.querySelectorAll('img.kind-logo, img.logo-mark, img.empty-logo')].every((i) => i.complete && i.naturalWidth > 0)), 'loghi non caricati offline');
+  await ictx.setOffline(false);
+});
+
+await step('installazione: il service worker non tocca le API: gli accessi passano dai server (finti) mentre la pagina è controllata', async () => {
+  await ipage.reload();
+  assert(await ipage.evaluate(() => !!navigator.serviceWorker.controller));
+  const before = log.filter((l) => l.method === 'login' || l.method === 'addonCollectionGet').length;
+  await addAccount('stremio', 's@x.it', 'pw', { remember: false, on: ipage });
+  await ipage.locator('section.panel .row').first().waitFor();
+  assert(log.filter((l) => l.method === 'login' || l.method === 'addonCollectionGet').length >= before + 2, 'le richieste alle API non sono arrivate');
+  const apiCached = await ipage.evaluate(async () => (await (await caches.open('addon-manager-v1')).keys()).some((r) => !r.url.startsWith(location.origin)));
+  assert(!apiCached, 'una risposta di un altro dominio è finita in cache');
+});
+
+await step('installazione: invito con "Installa" (apre l\'installazione vera) e "Non ora" (ricordato dopo il reload)', async () => {
+  const pg = await ictx.newPage();
+  await pg.goto(APP);
+  assert(await pg.locator('#install-banner').isHidden(), 'invito visibile senza che il browser abbia dato il via libera');
+  await synthInstallPrompt(pg);
+  const banner = pg.locator('#install-banner');
+  await banner.waitFor();
+  assert(/Installa Addon Manager/.test(await banner.innerText()));
+  await banner.locator('button:has-text("Installa")').click();
+  eq(await pg.evaluate(() => window.__prompted), 1, 'la finestra di installazione non è stata richiesta');
+  // l'evento vale una volta sola: dopo la richiesta l'invito si chiude (se la persona rinuncia, Chrome ne manda un altro più avanti)
+  assert(await banner.isHidden(), 'l\'invito è rimasto dopo la richiesta di installazione');
+  // "Non ora" → non ricompare
+  await synthInstallPrompt(pg);
+  await banner.waitFor();
+  await banner.locator('button:has-text("Non ora")').click();
+  assert(await banner.isHidden());
+  await pg.reload();
+  await synthInstallPrompt(pg);
+  await pg.waitForTimeout(200);
+  assert(await pg.locator('#install-banner').isHidden(), 'l\'invito è tornato dopo "Non ora"');
+  // …ma l'installazione resta raggiungibile dalla finestra Backup
+  await pg.click('#backup');
+  const dlg = pg.locator('dialog[open]');
+  await dlg.locator('h3', { hasText: 'Installa come app' }).waitFor();
+  await dlg.locator('button:has-text("Installa")').click();
+  eq(await pg.evaluate(() => window.__prompted), 1);
+  await pg.close();
+});
+
+await step('installazione: dopo l\'installazione (evento appinstalled) l\'invito sparisce', async () => {
+  const pg = await ictx.newPage();
+  await pg.goto(APP);
+  await pg.evaluate(() => localStorage.removeItem('addonmanager.install.dismissed'));
+  await pg.reload();
+  await synthInstallPrompt(pg);
+  await pg.locator('#install-banner').waitFor();
+  await pg.evaluate(() => window.dispatchEvent(new Event('appinstalled')));
+  await pg.locator('#install-banner').waitFor({ state: 'hidden' });
+  await pg.click('#backup');
+  await pg.locator('dialog[open]').locator('text=Stai usando Addon Manager come app installata').waitFor();
+  await pg.close();
+});
+
+await step('installazione: già installata (finestra standalone) → nessun invito', async () => {
+  const sctx = await newContext({ viewport: { width: 1200, height: 700 } });
+  await sctx.addInitScript(() => {
+    const real = window.matchMedia.bind(window);
+    window.matchMedia = (q) => {
+      const m = real(q);
+      return q === '(display-mode: standalone)' ? Object.defineProperty(m, 'matches', { value: true }) : m;
+    };
+  });
+  const pg = await sctx.newPage();
+  await pg.goto(APP);
+  await pg.evaluate(() => { const e = new Event('beforeinstallprompt', { cancelable: true }); e.__synthetic = true; e.prompt = async () => {}; e.userChoice = new Promise(() => {}); window.dispatchEvent(e); });
+  await pg.waitForTimeout(200);
+  assert(await pg.locator('#install-banner').isHidden(), 'invito mostrato in un\'app già installata');
+  await sctx.close();
+});
+
+await step('installazione: su iPhone (senza evento di installazione) si spiega come fare dal menu Condividi', async () => {
+  const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+  const xctx = await newContext({ viewport: { width: 390, height: 844 }, userAgent: UA, isMobile: true, hasTouch: true });
+  const pg = await xctx.newPage();
+  await pg.goto(APP);
+  const banner = pg.locator('#install-banner');
+  await banner.waitFor();
+  await banner.locator('button:has-text("Come si installa")').tap();
+  const dlg = pg.locator('dialog[open]');
+  const text = await dlg.innerText();
+  assert(/Condividi/.test(text) && /Aggiungi alla schermata Home/.test(text), `istruzioni iOS mancanti: ${text}`);
+  assert(!/Dock/.test(text), 'istruzioni del Mac su iPhone');
+  await dlg.locator('button:has-text("Ho capito")').tap();
+  await banner.locator('button:has-text("Non ora")').tap();
+  assert(await banner.isHidden());
+  await xctx.close();
+});
+
+await step('installazione: Safari su Mac → istruzioni «Aggiungi al Dock…»', async () => {
+  const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15';
+  const xctx = await newContext({ viewport: { width: 1200, height: 700 }, userAgent: UA });
+  const pg = await xctx.newPage();
+  await pg.goto(APP);
+  await pg.locator('#install-banner button:has-text("Come si installa")').click();
+  const text = await pg.locator('dialog[open]').innerText();
+  assert(/Aggiungi al Dock/.test(text) && !/Condividi/.test(text), text);
+  await xctx.close();
+});
+
+await step('installazione: chiusura dei contesti di prova', async () => { await ictx.close(); });
 
 await step('nessun errore JS / violazione CSP in console', async () => {
   assert(errors.length === 0, errors.join('\n'));

@@ -1,8 +1,12 @@
 import test from 'node:test';
+import vm from 'node:vm';
+import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 
 import { parseAddonUrl, toManifestUrl, idOf, baseUrl, extractUrls, pLimit, isHttpUrl, moveInArray } from '../js/util.js';
 import { buildExport, parseImport } from '../js/backup.js';
+import { detectPlatform } from '../js/install.js';
 import { Panel, makeItem, planMirror, applyMirror, diffLists, rebaseOnRemote, mergeThreeWay } from '../js/model.js';
 import { convertItem } from '../js/convert.js';
 import { fromDescriptor, toDescriptor, getAddons, setAddons, login as stremioLogin, StremioError } from '../js/stremio.js';
@@ -527,4 +531,132 @@ test('backup: l\'esportazione si rilegge e i file della versione precedente (app
   assert.deepEqual(back, [{ title: 'Famiglia · Luca', items: [{ url: 'https://a.test/x,y|z/manifest.json', name: 'A', enabled: false }] }]);
   const legacy = { app: 'streamsync', version: 1, lists: [{ title: 'Vecchia', account: 'Casa', addons: [{ url: 'https://b.test/manifest.json', name: 'B', enabled: true }] }] };
   assert.deepEqual(parseImport(JSON.stringify(legacy)), [{ title: 'Casa · Vecchia', items: [{ url: 'https://b.test/manifest.json', name: 'B', enabled: true }] }]);
+});
+
+// ---------- installazione come app ----------
+test('detectPlatform: iPhone/iPad (anche iPadOS "da Mac"), Safari su Mac, e tutto il resto', () => {
+  const SAFARI = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15';
+  const cases = [
+    ['Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1', 'iPhone', 5, 'ios'],
+    ['Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/126.0 Mobile/15E148 Safari/604.1', 'iPhone', 5, 'ios'],
+    [SAFARI, 'MacIntel', 5, 'ios'],        // iPadOS: si presenta come Mac ma ha il touch
+    [SAFARI, 'MacIntel', 0, 'mac-safari'],
+    ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36', 'MacIntel', 0, 'other'],
+    ['Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36', 'Linux armv8l', 5, 'other'],
+    ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0', 'Win32', 0, 'other'],
+    ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:127.0) Gecko/20100101 Firefox/127.0', 'MacIntel', 0, 'other'],
+  ];
+  for (const [ua, platform, maxTouchPoints, expected] of cases) assert.equal(detectPlatform({ ua, platform, maxTouchPoints }), expected, ua);
+  assert.equal(detectPlatform(), 'other');
+});
+
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const swSource = readFileSync(ROOT + 'sw.js', 'utf8');
+const SHELL = new Function(`return ${/const SHELL = (\[[\s\S]*?\]);/.exec(swSource)[1]}`)();
+
+const walk = (dir) => readdirSync(ROOT + dir).flatMap((n) => (statSync(ROOT + dir + '/' + n).isDirectory() ? walk(dir + '/' + n) : [dir + '/' + n]));
+
+test('service worker: ogni file elencato esiste, e ogni file di js/ e css/ è nell\'elenco (offline completo)', () => {
+  for (const f of SHELL) assert.ok(existsSync(ROOT + (f === './' ? 'index.html' : f)), `nell'elenco ma assente: ${f}`);
+  const missing = [...walk('js'), ...walk('css')].filter((f) => !SHELL.includes(f));
+  assert.deepEqual(missing, [], `file dell'app non presenti in sw.js (offline incompleto): ${missing}`);
+  for (const f of ['manifest.webmanifest', 'img/logo.svg', 'img/stremio.png', 'img/nuvio.png']) assert.ok(SHELL.includes(f), `manca ${f}`);
+  assert.ok(!SHELL.includes('index.html'), 'index.html risponde con un reindirizzamento su Cloudflare: si usa "./"');
+});
+
+/** Esegue sw.js in un ambiente finto (cache e rete simulate) e permette di inviargli eventi. */
+function loadSw(fetchImpl) {
+  const handlers = {};
+  const stores = new Map(); // nome cache -> Map(url -> Response)
+  const key = (r) => new URL(typeof r === 'string' ? r : r.url, 'https://app.test/').href;
+  const cacheOf = (name) => {
+    if (!stores.has(name)) stores.set(name, new Map());
+    const m = stores.get(name);
+    return {
+      put: async (req, res) => { m.set(key(req), res.clone()); },
+      match: async (req, opts = {}) => {
+        const k = key(req);
+        if (m.has(k)) return m.get(k).clone();
+        if (opts.ignoreSearch) { const u = new URL(k); u.search = ''; return m.get(u.href)?.clone(); }
+        return undefined;
+      },
+      addAll: async (reqs) => { for (const r of reqs) { const res = await fetchImpl(r); if (!res.ok) throw new Error('addAll: ' + res.status); m.set(key(r), res.clone()); } },
+    };
+  };
+  const self = { location: new URL('https://app.test/'), addEventListener: (t, fn) => { handlers[t] = fn; }, skipWaiting: async () => {}, clients: { claim: async () => {} } };
+  const caches = { open: async (n) => cacheOf(n), keys: async () => [...stores.keys()], delete: async (n) => stores.delete(n) };
+  class SwRequest extends Request { constructor(u, init) { super(new URL(u, 'https://app.test/').href, init); } }
+  vm.runInNewContext(swSource, { self, caches, fetch: fetchImpl, Request: SwRequest, Response, URL, AbortController, setTimeout, clearTimeout, console });
+  const waits = [];
+  const dispatch = async (request) => {
+    let handled = null;
+    handlers.fetch({ request, respondWith: (p) => { handled = p; }, waitUntil: (p) => waits.push(p) });
+    const response = handled ? await handled : null;
+    await Promise.all(waits.splice(0));
+    return response;
+  };
+  return { handlers, stores, dispatch };
+}
+const navigation = (url) => ({ url, method: 'GET', mode: 'navigate' });
+const reply = (body, { type = 'basic', redirected = false, status = 200 } = {}) => {
+  const r = new Response(body, { status });
+  Object.defineProperty(r, 'type', { value: type });
+  Object.defineProperty(r, 'redirected', { value: redirected });
+  return r;
+};
+
+test('service worker: non tocca richieste di altri domini (API, manifest degli addon) né non-GET', async () => {
+  let calls = 0;
+  const sw = loadSw(async () => { calls++; return reply('x'); });
+  assert.equal(await sw.dispatch(new Request('https://api.strem.io/api/login', { method: 'POST', body: '{}' })), null);
+  assert.equal(await sw.dispatch(new Request('https://api.nuvio.tv/rest/v1/addons')), null);
+  assert.equal(await sw.dispatch(new Request('https://addon.test/manifest.json')), null);
+  assert.equal(await sw.dispatch(new Request('https://app.test/js/app.js', { method: 'POST', body: 'x' })), null);
+  assert.equal(calls, 0);
+  assert.equal(sw.stores.size, 0, 'nulla deve finire in cache');
+});
+
+test('service worker: rete prima (file sempre freschi), poi cache se la rete manca', async () => {
+  let version = 'v1'; let online = true;
+  const sw = loadSw(async () => { if (!online) throw new TypeError('offline'); return reply(`contenuto ${version}`); });
+  const asset = () => new Request('https://app.test/js/app.js');
+  assert.equal(await (await sw.dispatch(asset())).text(), 'contenuto v1');
+  version = 'v2';
+  assert.equal(await (await sw.dispatch(asset())).text(), 'contenuto v2', 'online deve arrivare la versione nuova, non quella in cache');
+  online = false;
+  assert.equal(await (await sw.dispatch(asset())).text(), 'contenuto v2', 'offline si usa l\'ultima copia scaricata');
+  assert.equal(await (await sw.dispatch(new Request('https://app.test/js/app.js?v=3'))).text(), 'contenuto v2', 'la query string non fa mancare la cache');
+});
+
+test('service worker: offline una navigazione ricade sulla pagina principale; senza copia è un errore di rete', async () => {
+  let online = true;
+  const sw = loadSw(async (r) => { if (!online) throw new TypeError('offline'); return reply(new URL(r.url).pathname === '/' ? '<html>app</html>' : 'altro'); });
+  await sw.dispatch(navigation('https://app.test/'));
+  online = false;
+  const nav = await sw.dispatch(navigation('https://app.test/percorso/qualunque'));
+  assert.equal(await nav.text(), '<html>app</html>');
+  const missing = await sw.dispatch(new Request('https://app.test/js/mai-visto.js'));
+  assert.equal(missing.type, 'error');
+});
+
+test('service worker: non salva risposte d\'errore né reindirizzate (Chrome le rifiuta per le navigazioni)', async () => {
+  const responses = [reply('non trovato', { status: 404 }), reply('reindirizzato', { redirected: true }), reply('opaca', { type: 'cors' })];
+  const sw = loadSw(async () => responses.shift());
+  for (const path of ['a.js', 'b.js', 'c.js']) await sw.dispatch(new Request('https://app.test/' + path));
+  const cache = sw.stores.get('addon-manager-v1');
+  assert.equal(cache?.size ?? 0, 0, 'nessuna delle tre risposte doveva essere salvata');
+});
+
+test('service worker: installa tutto l\'elenco e all\'attivazione elimina solo le vecchie cache di Addon Manager', async () => {
+  const fetched = [];
+  const sw = loadSw(async (r) => { fetched.push(new URL(r.url).pathname); return reply('ok'); });
+  let installed; sw.handlers.install({ waitUntil: (p) => { installed = p; } });
+  await installed;
+  assert.equal(fetched.length, SHELL.length);
+  assert.ok(sw.stores.get('addon-manager-v1').size === SHELL.length);
+  sw.stores.set('addon-manager-v0', new Map());
+  sw.stores.set('altra-app', new Map());
+  let activated; sw.handlers.activate({ waitUntil: (p) => { activated = p; } });
+  await activated;
+  assert.deepEqual([...sw.stores.keys()].sort(), ['addon-manager-v1', 'altra-app']);
 });

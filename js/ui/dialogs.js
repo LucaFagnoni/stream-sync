@@ -3,6 +3,7 @@ import * as app from '../app.js';
 import { planMirror } from '../model.js';
 import { buildExport, parseImport } from '../backup.js';
 import { listBackups } from '../store.js';
+import { installSection } from './install-ui.js';
 import { extractUrls, idOf, hostOf, str } from '../util.js';
 
 const field = (label, input, hint) =>
@@ -252,6 +253,8 @@ export function openBackups() {
             h('div', null, h('strong', null, `${b.account || ''} · ${b.title}`), h('small', null, `${fmt(b.ts)} — ${b.items.length} addon`)),
             h('button', { type: 'button', class: 'btn small', onClick: () => downloadFile(`addon-manager-auto-${b.ts}.json`, JSON.stringify(buildExport([{ title: b.title, account: b.account, kind: b.kind, items: b.items }]), null, 2)) }, icon('download', 14), ' Scarica'))))
           : h('p', { class: 'muted' }, 'Ancora nessun backup automatico.'),
+        h('h3', null, 'Installa come app'),
+        installSection(),
         h('h3', null, 'Dati in questo browser'),
         h('p', { class: 'field-hint' }, 'Esce da tutti gli account (invalidando i token sul server) e cancella token, backup e impostazioni salvati qui. Da usare su un computer non tuo o se temi che un token sia stato esposto.'),
         h('div', { class: 'row-actions' }, h('button', { type: 'button', class: 'btn danger', onClick: async () => {
