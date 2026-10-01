@@ -622,7 +622,7 @@ test('service worker: ogni file elencato esiste, e ogni file di js/ e css/ è ne
   for (const f of SHELL) assert.ok(existsSync(ROOT + (f === './' ? 'index.html' : f)), `nell'elenco ma assente: ${f}`);
   const missing = [...walk('js'), ...walk('css')].filter((f) => !SHELL.includes(f));
   assert.deepEqual(missing, [], `file dell'app non presenti in sw.js (offline incompleto): ${missing}`);
-  for (const f of ['manifest.webmanifest', 'img/logo.svg', 'img/stremio.png', 'img/nuvio.png']) assert.ok(SHELL.includes(f), `manca ${f}`);
+  for (const f of ['manifest.webmanifest', 'img/logo.png', 'img/stremio.png', 'img/nuvio.png']) assert.ok(SHELL.includes(f), `manca ${f}`);
   assert.ok(!SHELL.includes('index.html'), 'index.html risponde con un reindirizzamento su Cloudflare: si usa "./"');
 });
 

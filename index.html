@@ -11,14 +11,14 @@
        connect-src è aperto a https/http perché i manifest degli addon stanno su host arbitrari.
        frame-ancestors non è supportato nel <meta>: l'anti-clickjacking è in js/main.js. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https: http: data:; connect-src https: http:; base-uri 'none'; form-action 'none'; object-src 'none'; manifest-src 'self'; require-trusted-types-for 'script'; trusted-types addon-manager-icons addon-manager-sw">
-  <link rel="icon" type="image/svg+xml" href="img/logo.svg">
+  <link rel="icon" type="image/png" href="img/logo.png">
   <link rel="icon" type="image/png" sizes="192x192" href="img/icon-192.png">
   <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="application-name" content="Addon Manager">
   <meta name="apple-mobile-web-app-title" content="Addon Manager">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#171a22" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#12142f" media="(prefers-color-scheme: dark)">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -26,7 +26,7 @@
   <header class="topbar">
     <!-- Testi: data-i18n* = chiave inglese (js/i18n.js). Riga principale (logo + azioni): su telefono resta fissa in alto; la ricerca scorre con la pagina -->
     <div class="topbar-main">
-      <div class="brand"><img class="logo-mark" src="img/logo.svg" alt="" width="30" height="30"><strong>Addon Manager</strong></div>
+      <div class="brand"><img class="logo-mark" src="img/logo.png" alt="" width="30" height="30"><strong>Addon Manager</strong></div>
       <div class="top-actions">
         <button id="save-all" type="button" class="btn primary" disabled></button>
         <button id="backup" type="button" class="btn" data-i18n-title="Backup and export" data-i18n-aria-label="Backup" title="Backup and export" aria-label="Backup">Backup</button>

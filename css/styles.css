@@ -1,8 +1,10 @@
 :root {
   color-scheme: light dark;
-  --bg: #f4f5f8; --surface: #ffffff; --surface-2: #f0f2f6; --border: #dfe3ea; --border-strong: #c9cfd9;
-  --text: #171a21; --muted: #667085; --primary: #6d4aff; --primary-ink: #fff; --danger: #d92d20;
-  --ok: #12a150; --warn: #b7791f; --info: #2563eb; --stremio: #8b5cf6; --nuvio: #1e88e5;
+  /* Palette presa dal logo: viola → blu (il tassello), azzurro (la freccia), blu notte (lo sfondo dell'icona). */
+  --bg: #f3f4fb; --surface: #ffffff; --surface-2: #eef0fa; --border: #dde0f0; --border-strong: #c7cce3;
+  --text: #15172e; --muted: #62678a; --primary: #7352f5; --primary-2: #4b7cf5; --primary-ink: #fff; --danger: #d92d20;
+  --ok: #12a150; --warn: #b7791f; --info: #3181fa; --stremio: #8b5cf6; --nuvio: #1e88e5;
+  --brand-gradient: linear-gradient(135deg, var(--primary), var(--primary-2));
   --shadow: 0 1px 2px rgba(16,24,40,.06), 0 4px 16px rgba(16,24,40,.06); --radius: 12px;
   /* Zone sicure del dispositivo (notch, barra di stato, indicatore Home): 0 sui computer */
   --safe-top: env(safe-area-inset-top, 0px); --safe-right: env(safe-area-inset-right, 0px);
@@ -11,9 +13,9 @@
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --bg:#0e1015; --surface:#171a22; --surface-2:#1f2330; --border:#2a2f3d; --border-strong:#3a4052; --text:#e8eaf0; --muted:#98a1b3; --primary:#8b72ff; --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.35); }
+  :root:not([data-theme="light"]) { --bg:#0a0b22; --surface:#12142f; --surface-2:#1a1d3f; --border:#2a2e58; --border-strong:#3b4070; --text:#eaecff; --muted:#9ca2cf; --primary:#8f74ff; --primary-2:#5b8bff; --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.35); }
 }
-:root[data-theme="dark"] { --bg:#0e1015; --surface:#171a22; --surface-2:#1f2330; --border:#2a2f3d; --border-strong:#3a4052; --text:#e8eaf0; --muted:#98a1b3; --primary:#8b72ff; --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.35); }
+:root[data-theme="dark"] { --bg:#0a0b22; --surface:#12142f; --surface-2:#1a1d3f; --border:#2a2e58; --border-strong:#3b4070; --text:#eaecff; --muted:#9ca2cf; --primary:#8f74ff; --primary-2:#5b8bff; --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.35); }
 
 * { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -31,7 +33,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .topbar { display: flex; align-items: center; gap: 12px; padding: max(10px, var(--safe-top)) max(16px, var(--safe-right)) 10px max(16px, var(--safe-left)); background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
 .topbar-main { display: contents; }
 .brand { order: 0; display: flex; align-items: center; gap: 8px; font-size: 16px; }
-.logo-mark { width: 30px; height: 30px; display: block; flex: none; }
+.logo-mark { width: 30px; height: 30px; display: block; flex: none; object-fit: contain; }
 .empty-logo { width: 72px; height: 72px; margin: 0 auto 14px; display: block; }
 .search { order: 1; position: relative; flex: 1; max-width: 420px; }
 .search .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); }
@@ -44,8 +46,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid var(--border-strong); border-radius: 9px; background: var(--surface); cursor: pointer; white-space: nowrap; }
 .btn:hover:not(:disabled) { background: var(--surface-2); }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
-.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
-.btn.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--primary); }
+.btn.primary { background: var(--brand-gradient); border-color: var(--primary); color: var(--primary-ink); }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--brand-gradient); }
 .btn.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
 .btn.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 10%, var(--surface)); }
 .dialog-actions .btn.danger:last-child { background: var(--danger); color: #fff; border-color: var(--danger); }
@@ -259,7 +261,7 @@ textarea { resize: vertical; font: 12.5px ui-monospace, monospace; }
 /* ---- invito all'installazione ---- */
 .install-banner { margin: 10px max(16px, var(--safe-right)) 0 max(16px, var(--safe-left)); padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border)); border-radius: var(--radius); background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
 .install-inner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.install-logo { border-radius: 8px; flex: none; }
+.install-logo { flex: none; object-fit: contain; }
 .install-text { flex: 1 1 220px; display: flex; flex-direction: column; min-width: 0; }
 .install-text span { color: var(--muted); font-size: 12.5px; }
 .install-actions { display: flex; gap: 8px; margin-left: auto; }

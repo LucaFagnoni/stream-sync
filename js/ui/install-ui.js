@@ -49,7 +49,7 @@ export function mountInstallBanner(host) {
     host.hidden = !show;
     if (!show) { host.replaceChildren(); return; }
     fill(host, h('div', { class: 'install-inner' },
-      h('img', { class: 'install-logo', src: 'img/logo.svg', alt: '', width: 32, height: 32 }),
+      h('img', { class: 'install-logo', src: 'img/logo.png', alt: '', width: 32, height: 32 }),
       h('div', { class: 'install-text' },
         h('strong', null, t('Install Addon Manager')),
         h('span', null, t('It opens like an app, in a window of its own, with its own icon.'))),

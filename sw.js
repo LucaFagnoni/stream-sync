@@ -33,7 +33,7 @@ const SHELL = [
   'js/ui/install-ui.js',
   'js/ui/theme.js',
   'js/ui/views.js',
-  'img/logo.svg',
+  'img/logo.png',
   'img/nuvio.png',
   'img/stremio.png',
   'img/icon-192.png',

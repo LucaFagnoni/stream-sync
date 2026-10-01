@@ -175,7 +175,8 @@ await step('brand: nome, icone e manifest installabile accettati da Chromium (CS
   eq((await page.locator('.brand strong').innerText()).trim(), 'Addon Manager');
   assert(!/StreamSync/i.test(await page.locator('body').innerText()), 'resta il vecchio nome nella pagina');
   const links = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('link[rel]')].map((l) => [l.rel + (l.type ? ':' + l.type : ''), l.getAttribute('href')])));
-  eq([links.manifest, links['apple-touch-icon'], links['icon:image/svg+xml']], ['manifest.webmanifest', 'img/apple-touch-icon.png', 'img/logo.svg']);
+  eq([links.manifest, links['apple-touch-icon']], ['manifest.webmanifest', 'img/apple-touch-icon.png']);
+  eq(await page.evaluate(() => [...document.querySelectorAll('link[rel=icon]')].map((l) => l.getAttribute('href'))), ['img/logo.png', 'img/icon-192.png']);
   // Il manifest viene scaricato dal browser (non dalla pagina): se la CSP lo bloccasse, getAppManifest riporterebbe errori
   const cdp = await context.newCDPSession(page);
   const man = await cdp.send('Page.getAppManifest');
@@ -1340,7 +1341,7 @@ await step('installazione: service worker registrato, attivo e che controlla la 
   await ipage.reload();
   assert(await ipage.evaluate(() => !!navigator.serviceWorker.controller), 'il service worker non controlla la pagina');
   const cache = await ipage.evaluate(async () => (await (await caches.open('addon-manager-v2')).keys()).map((r) => new URL(r.url).pathname));
-  for (const f of ['/', '/js/main.js', '/js/ui/install-ui.js', '/css/styles.css', '/img/logo.svg', '/manifest.webmanifest']) assert(cache.includes(f), `non in cache: ${f}`);
+  for (const f of ['/', '/js/main.js', '/js/ui/install-ui.js', '/css/styles.css', '/img/logo.png', '/manifest.webmanifest']) assert(cache.includes(f), `non in cache: ${f}`);
   const cdp = await ictx.newCDPSession(ipage);
   eq((await cdp.send('Page.getAppManifest')).errors, []);
   eq((await cdp.send('Page.getInstallabilityErrors')).installabilityErrors, [], 'non installabile con il service worker attivo');

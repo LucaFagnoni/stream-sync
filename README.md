@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="img/logo.svg" alt="Logo di Addon Manager" width="96" height="96">
+  <img src="img/logo.png" alt="Logo di Addon Manager" width="96" height="96">
 </p>
 
 <h1 align="center">Addon Manager</h1>

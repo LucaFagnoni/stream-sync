@@ -692,7 +692,7 @@ export function renderBoard() {
 
 function emptyState() {
   return h('div', { class: 'empty-state' },
-    h('img', { class: 'empty-logo', src: 'img/logo.svg', alt: '', width: 72, height: 72 }),
+    h('img', { class: 'empty-logo', src: 'img/logo.png', alt: '', width: 72, height: 72 }),
     h('h2', null, t('Manage the addons of all your accounts')),
     h('p', null, t('Add one or more Stremio and Nuvio accounts, then copy and move addons between the lists, reorder them and save when you are ready.')),
     h('button', { type: 'button', class: 'btn primary large', onClick: () => openLogin() }, icon('plus', 16), ` ${t('Add your first account')}`),
