@@ -10,9 +10,9 @@ const $ = (id) => document.getElementById(id);
 // se la pagina è dentro un iframe altrui non si carica nessun account.
 if (window.top !== window.self) {
   document.body.replaceChildren(h('main', { class: 'framed' },
-    h('p', null, 'Per sicurezza StreamSync non funziona dentro un\'altra pagina.'),
-    h('a', { href: location.href, target: '_top', rel: 'noopener' }, 'Apri StreamSync direttamente')));
-  throw new Error('StreamSync: caricamento in un frame bloccato');
+    h('p', null, 'Per sicurezza Addon Manager non funziona dentro un\'altra pagina.'),
+    h('a', { href: location.href, target: '_top', rel: 'noopener' }, 'Apri Addon Manager direttamente')));
+  throw new Error('Addon Manager: caricamento in un frame bloccato');
 }
 
 // ---------- tema ----------

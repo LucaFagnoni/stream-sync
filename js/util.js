@@ -97,6 +97,15 @@ export function hashString(s) {
   return (h >>> 0).toString(16);
 }
 
+/** Copia di `arr` con l'elemento in posizione `from` spostato nella posizione finale `to`. */
+export function moveInArray(arr, from, to) {
+  const out = arr.slice();
+  if (!Number.isInteger(from) || from < 0 || from >= out.length) return out;
+  const [item] = out.splice(from, 1);
+  out.splice(Math.max(0, Math.min(to, out.length)), 0, item);
+  return out;
+}
+
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Segnale che scade dopo `ms` (undefined dove AbortSignal.timeout non esiste). */

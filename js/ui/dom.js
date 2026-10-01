@@ -62,7 +62,7 @@ const ICONS = {
 
 // Trusted Types: l'unico innerHTML dell'app accetta solo il NOME di un'icona e restituisce il markup
 // costante corrispondente. Con la CSP `require-trusted-types-for 'script'` qualunque altro innerHTML fallisce.
-const iconPolicy = globalThis.trustedTypes?.createPolicy?.('streamsync-icons', {
+const iconPolicy = globalThis.trustedTypes?.createPolicy?.('addon-manager-icons', {
   createHTML: (name) => (Object.hasOwn(ICONS, name) ? ICONS[name] : ''),
 });
 

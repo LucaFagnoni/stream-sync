@@ -242,7 +242,7 @@ export function openBackups() {
         h('h3', null, 'Esporta'),
         h('p', { class: 'field-hint' }, 'Scarica le liste attualmente caricate (bozza inclusa). Il file contiene gli URL degli addon, che possono includere chiavi personali.'),
         h('div', { class: 'row-actions' },
-          h('button', { type: 'button', class: 'btn', disabled: !ready.length, onClick: () => exportPanels(ready, `streamsync-backup-${new Date().toISOString().slice(0, 10)}.json`) },
+          h('button', { type: 'button', class: 'btn', disabled: !ready.length, onClick: () => exportPanels(ready, `addon-manager-backup-${new Date().toISOString().slice(0, 10)}.json`) },
             icon('download', 15), ' Esporta tutte le liste'),
           h('span', { class: 'field-hint' }, 'Per importare: menu ⋯ del pannello → «Importa da file».')),
         h('h3', null, 'Backup automatici'),
@@ -250,7 +250,7 @@ export function openBackups() {
         auto.length
           ? h('ul', { class: 'backup-list' }, ...auto.map((b) => h('li', null,
             h('div', null, h('strong', null, `${b.account || ''} · ${b.title}`), h('small', null, `${fmt(b.ts)} — ${b.items.length} addon`)),
-            h('button', { type: 'button', class: 'btn small', onClick: () => downloadFile(`streamsync-auto-${b.ts}.json`, JSON.stringify(buildExport([{ title: b.title, account: b.account, kind: b.kind, items: b.items }]), null, 2)) }, icon('download', 14), ' Scarica'))))
+            h('button', { type: 'button', class: 'btn small', onClick: () => downloadFile(`addon-manager-auto-${b.ts}.json`, JSON.stringify(buildExport([{ title: b.title, account: b.account, kind: b.kind, items: b.items }]), null, 2)) }, icon('download', 14), ' Scarica'))))
           : h('p', { class: 'muted' }, 'Ancora nessun backup automatico.'),
         h('h3', null, 'Dati in questo browser'),
         h('p', { class: 'field-hint' }, 'Esce da tutti gli account (invalidando i token sul server) e cancella token, backup e impostazioni salvati qui. Da usare su un computer non tuo o se temi che un token sia stato esposto.'),

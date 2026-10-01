@@ -10,7 +10,12 @@ let filterText = '';
 let board;
 const panelEls = new Map();
 const lastClicked = new Map();
-let drag = null; // { panelId, keys }
+let drag = null; // { panelId, keys }: trascinamento di addon
+let acctDrag = null; // { accountId, target: { id, before } | null }: trascinamento di un intero account
+let renderAccountsLater = false;
+const ACCT_MIME = 'application/x-addon-manager-account';
+// Il trascinamento con il mouse c'è solo dove c'è un puntatore preciso; su touch si usa il menu.
+const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
 
 export const setFilter = (t) => {
   filterText = t.trim().toLowerCase();
@@ -245,7 +250,7 @@ const edgeSpeed = (pos, start, end) => {
 const canScrollY = (el) => el.scrollHeight > el.clientHeight + 1;
 
 function scrollTick() {
-  if (!drag || (!scroll.dx && !scroll.dy)) { scrollRaf = 0; return; }
+  if ((!drag && !acctDrag) || (!scroll.dx && !scroll.dy)) { scrollRaf = 0; return; }
   if (scroll.dx) board.scrollLeft += scroll.dx;
   if (scroll.dy) {
     if (scroll.scroller === document.scrollingElement) window.scrollBy(0, scroll.dy);
@@ -261,7 +266,7 @@ function stopAutoScroll() {
 }
 
 document.addEventListener('dragover', (e) => {
-  if (!drag || !board) return;
+  if ((!drag && !acctDrag) || !board) return;
   const b = board.getBoundingClientRect();
   const left = Math.max(b.left, 0);
   const right = Math.min(b.right, innerWidth);
@@ -280,9 +285,16 @@ document.addEventListener('dragover', (e) => {
 function endDrag() {
   stopAutoScroll();
   drag = null;
+  acctDrag = null;
   for (const el of board.querySelectorAll('.dragging, .drop-target')) el.classList.remove('dragging', 'drop-target');
+  for (const el of document.querySelectorAll('.acct-dragging, .acct-before, .acct-after')) el.classList.remove('acct-dragging', 'acct-before', 'acct-after');
   for (const el of board.querySelectorAll('.drop-line')) el.remove();
+  if (renderAccountsLater) { renderAccountsLater = false; renderAccounts(stripEl); }
 }
+
+// Un pointerdown non arriva mai durante un trascinamento: se è rimasto uno stato appeso (es. l'elemento
+// d'origine è stato ricostruito e dragend non è partito), si azzera prima della prossima interazione.
+document.addEventListener('pointerdown', () => { if (drag || acctDrag) endDrag(); }, true);
 
 function dropIndex(panel, list, y) {
   const rows = [...list.querySelectorAll('.row:not([hidden])')];
@@ -308,6 +320,7 @@ const isExternal = (e) => [...(e.dataTransfer?.types || [])].some((t) => t === '
 function wireDrop(section, panel) {
   const list = () => section.querySelector('.plist');
   section.addEventListener('dragover', (e) => {
+    if (acctDrag) return;
     if (!drag) {
       // Link trascinato da un'altra scheda/app: si propone l'installazione (verificata) in questo pannello.
       if (!isExternal(e) || panel.readOnly || panel.status !== 'ready') return;
@@ -327,6 +340,7 @@ function wireDrop(section, panel) {
     if (!section.contains(e.relatedTarget)) { section.classList.remove('drop-target'); section.querySelector('.drop-line')?.remove(); }
   });
   section.addEventListener('drop', (e) => {
+    if (acctDrag) return;
     if (!drag) {
       if (!isExternal(e) || panel.readOnly || panel.status !== 'ready') return;
       e.preventDefault();
@@ -351,6 +365,76 @@ function wireDrop(section, panel) {
   });
 }
 
+// ---------- riordino degli account (linguette e intestazioni dei pannelli) ----------
+const groupOf = (id, cls) => [...document.querySelectorAll('[data-acc]')].filter((el) => el.dataset.acc === id && el.classList.contains(cls));
+const rowLayout = () => getComputedStyle(board).flexDirection === 'row';
+
+function dropAccountAt(srcId, targetId, before) {
+  const list = state.accounts;
+  const from = list.findIndex((a) => a.id === srcId);
+  const to = list.findIndex((a) => a.id === targetId);
+  if (from < 0 || to < 0 || from === to) return false;
+  const insertAt = before ? to : to + 1; // posizione nella lista di partenza
+  return app.moveAccount(list[from], insertAt > from ? insertAt - 1 : insertAt);
+}
+
+function startAccountDrag(e, accountId) {
+  if (drag) return;
+  acctDrag = { accountId, target: null };
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData(ACCT_MIME, accountId); // Firefox non avvia il trascinamento senza dati
+  requestAnimationFrame(() => { for (const el of document.querySelectorAll('[data-acc]')) if (el.dataset.acc === accountId) el.classList.add('acct-dragging'); });
+}
+
+function finishAccountDrag() {
+  const d = acctDrag;
+  endDrag();
+  if (d?.target) dropAccountAt(d.accountId, d.target.id, d.target.before);
+}
+
+/** Rende `el` un'origine di trascinamento per l'account (solo con mouse). */
+function makeAccountDraggable(el, accountId, title) {
+  if (!finePointer.matches) return;
+  el.setAttribute('draggable', 'true');
+  if (title) el.title = title;
+  el.addEventListener('dragstart', (e) => startAccountDrag(e, accountId));
+  el.addEventListener('dragend', endDrag);
+}
+
+/**
+ * Rende `el` una destinazione: mostra dove cadrebbe l'account (prima/dopo il gruppo di `accountId`)
+ * e, al rilascio, lo sposta. `group()` = elementi del gruppo, `before(e)` = il puntatore è nella prima metà?
+ */
+function wireAccountTarget(el, accountId, { group, before }) {
+  el.addEventListener('dragover', (e) => {
+    if (!acctDrag) return;
+    // Rilasciare un account sul proprio gruppo non ha senso: niente indicatore, niente drop
+    if (accountId === acctDrag.accountId) { for (const m of document.querySelectorAll('.acct-before, .acct-after')) m.classList.remove('acct-before', 'acct-after'); acctDrag.target = null; return; }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const b = before(e);
+    for (const m of document.querySelectorAll('.acct-before, .acct-after')) m.classList.remove('acct-before', 'acct-after');
+    const els = group();
+    (b ? els[0] : els.at(-1))?.classList.add(b ? 'acct-before' : 'acct-after');
+    acctDrag.target = { id: accountId, before: b };
+  });
+  el.addEventListener('drop', (e) => { if (!acctDrag) return; e.preventDefault(); finishAccountDrag(); });
+}
+
+/** Un pannello (o scheda) fa parte di un gruppo: la metà si calcola sull'intero gruppo dell'account. */
+function panelAccountTarget(section, accountId) {
+  wireAccountTarget(section, accountId, {
+    group: () => groupOf(accountId, 'panel'),
+    before: (e) => {
+      const rects = groupOf(accountId, 'panel').map((el) => el.getBoundingClientRect());
+      const row = rowLayout();
+      const start = Math.min(...rects.map((r) => (row ? r.left : r.top)));
+      const end = Math.max(...rects.map((r) => (row ? r.right : r.bottom)));
+      return (row ? e.clientX : e.clientY) < (start + end) / 2;
+    },
+  });
+}
+
 // ---------- pannello ----------
 function changeSummary(panel) {
   if (!panel.dirty) return null;
@@ -365,7 +449,13 @@ function changeSummary(panel) {
 
 function panelMenu(anchor, panel) {
   const all = panel.items.length > 0 && panel.items.every((i) => panel.selected.has(i.key));
+  const acc = app.accountOf(panel);
+  const at = state.accounts.indexOf(acc);
+  const many = state.accounts.length > 1;
   menu(anchor, [
+    many ? { label: 'Sposta account prima', hint: 'Sposta tutti i pannelli di questo account', disabled: at <= 0, onClick: () => app.moveAccountBy(acc, -1) } : null,
+    many ? { label: 'Sposta account dopo', hint: 'Sposta tutti i pannelli di questo account', disabled: at >= state.accounts.length - 1, onClick: () => app.moveAccountBy(acc, 1) } : null,
+    many ? 'sep' : null,
     { label: 'Aggiungi da URL…', icon: 'plus', onClick: () => openInstall(panel) },
     { label: 'Importa da file…', icon: 'upload', onClick: () => openImport(panel) },
     { label: 'Sincronizza da un altro pannello…', icon: 'layers', onClick: () => openMirror(panel) },
@@ -374,12 +464,12 @@ function panelMenu(anchor, panel) {
     { label: all ? 'Deseleziona tutti' : 'Seleziona tutti', icon: 'check', onClick: () => { panel.selected = all ? new Set() : new Set(panel.items.filter(matches).map((i) => i.key)); app.notifyPanel(panel); } },
     { label: panel.kind === 'stremio' ? 'Verifica e aggiorna tutti' : 'Verifica raggiungibilità di tutti', icon: 'refresh', onClick: () => runCheck(panel) },
     'sep',
-    { label: 'Esporta questa lista…', icon: 'download', onClick: () => exportPanels([panel], `streamsync-${panel.title.replace(/\W+/g, '-').toLowerCase()}.json`) },
+    { label: 'Esporta questa lista…', icon: 'download', onClick: () => exportPanels([panel], `addon-manager-${panel.title.replace(/\W+/g, '-').toLowerCase()}.json`) },
     { label: 'Copia tutti gli URL', icon: 'copy', onClick: () => copyUrl(panel.items.map((i) => i.url).join('\n'), `${panel.items.length} URL copiati`) },
     'sep',
     { label: 'Ricarica dal server', icon: 'refresh', onClick: () => reloadPanel(panel) },
     { label: 'Annulla tutte le modifiche', icon: 'undo', disabled: !panel.dirty, onClick: () => app.discardPanel(panel) },
-  ]);
+  ].filter(Boolean));
 }
 
 async function reloadPanel(panel) {
@@ -391,14 +481,15 @@ function selectionBar(panel) {
   const keys = [...panel.selected];
   const only = keys.map((k) => panel.find(k)).filter(Boolean);
   // Su touch il testo dei pulsanti si nasconde (.lbl) e restano le icone: la barra sta su una riga sola.
-  const act = (name, text, onClick, { danger = false, disabled = false, short = null } = {}) => h('button', {
+  // `text` = nome accessibile e tooltip; `visible` = testo mostrato su desktop (se diverso); `short` = parola breve su touch
+  const act = (name, text, onClick, { danger = false, disabled = false, short = null, visible = text } = {}) => h('button', {
     type: 'button', class: `btn small${danger ? ' danger' : ''}`, title: text, 'aria-label': text, disabled: disabled || undefined, onClick,
-  }, icon(name, 14), h('span', { class: 'lbl' }, ` ${text}`), short ? h('span', { class: 'lbl-s' }, ` ${short}`) : null);
+  }, icon(name, 14), h('span', { class: 'lbl' }, ` ${visible}`), short ? h('span', { class: 'lbl-s' }, ` ${short}`) : null);
   return h('div', { class: 'selbar', role: 'toolbar', 'aria-label': 'Azioni sulla selezione' },
     h('strong', { class: 'selcount' }, h('span', { class: 'selicon' }, icon('check', 14)), `${keys.length}`, h('span', { class: 'lbl' }, ' selezionati')),
     act('layers', 'Copia in…', (e) => targetMenu(e.currentTarget, panel, keys, false), { short: 'Copia' }),
     act('move', 'Sposta in…', (e) => targetMenu(e.currentTarget, panel, keys, true), { disabled: panel.readOnly, short: 'Sposta' }),
-    act('link', 'Copia gli URL', () => copyUrl(only.map((i) => i.url).join('\n'), `${only.length} URL copiati`)),
+    act('link', 'Copia gli URL', () => copyUrl(only.map((i) => i.url).join('\n'), `${only.length} URL copiati`), { visible: 'URL' }),
     panel.kind === 'nuvio' ? act('power', 'Attiva/Disattiva', () => { panel.setEnabled(keys, !only.every((i) => i.enabled)); app.notifyPanel(panel); }) : null,
     act('trash', 'Rimuovi', () => removeKeys(panel, keys), { danger: true }),
     h('button', { type: 'button', class: 'icon-btn', title: 'Deseleziona', 'aria-label': 'Deseleziona', onClick: () => { panel.selected = new Set(); app.notifyPanel(panel); } }, icon('x')));
@@ -428,7 +519,7 @@ function buildPanel(panel) {
   const collapsed = !!state.settings.collapsed[panel.id];
   const section = h('section', {
     class: `panel ${panel.kind}${panel.dirty ? ' dirty' : ''}${panel.status === 'saving' ? ' saving' : ''}${collapsed ? ' collapsed' : ''}`,
-    dataset: { panel: panel.id }, style: { '--accent': safeColor(panel.color) },
+    dataset: { panel: panel.id, acc: panel.accountId }, style: { '--accent': safeColor(panel.color) },
     'aria-label': `${panel.kind === 'nuvio' ? 'Nuvio' : 'Stremio'} ${panel.title}`,
   },
   h('div', { class: 'pstick' },
@@ -451,6 +542,8 @@ function buildPanel(panel) {
   !collapsed && panel.selected.size ? selectionBar(panel) : null),
   collapsed ? null : body(panel));
   wireDrop(section, panel);
+  makeAccountDraggable(section.querySelector('.phead'), panel.accountId, 'Trascina per spostare l\'account');
+  panelAccountTarget(section, panel.accountId);
   return section;
 }
 
@@ -474,7 +567,7 @@ export function renderPanel(panel) {
 // ---------- account ----------
 function accountCard(acc) {
   const auth = acc.status === 'auth';
-  return h('section', { class: `panel account-card ${acc.kind}`, dataset: { account: acc.id } },
+  const card = h('section', { class: `panel account-card ${acc.kind}`, dataset: { account: acc.id, acc: acc.id } },
     h('header', { class: 'phead' },
       kindLogo(acc.kind),
       h('div', { class: 'ptitle' }, h('strong', null, acc.label), h('small', null, acc.email))),
@@ -484,6 +577,9 @@ function accountCard(acc) {
         auth ? h('button', { type: 'button', class: 'btn small primary', onClick: () => openLogin({ account: acc }) }, 'Accedi')
           : h('button', { type: 'button', class: 'btn small', onClick: () => app.reloadAccount(acc) }, 'Riprova')),
     h('div', { class: 'note' }, h('button', { type: 'button', class: 'btn small', onClick: () => removeAcc(acc) }, 'Rimuovi account')));
+  makeAccountDraggable(card.querySelector('.phead'), acc.id, 'Trascina per spostare l\'account');
+  panelAccountTarget(card, acc.id);
+  return card;
 }
 
 async function removeAcc(acc) {
@@ -496,23 +592,51 @@ async function removeAcc(acc) {
   if (ok) await app.removeAccount(acc);
 }
 
+function accountChip(acc) {
+  const dirty = acc.panelIds.some((id) => state.panels.get(id)?.dirty);
+  const at = state.accounts.indexOf(acc);
+  const last = state.accounts.length - 1;
+  const status = acc.status === 'ready' ? 'connesso' : acc.status === 'auth' ? 'accesso richiesto' : acc.status === 'error' ? 'errore' : 'connessione…';
+  const chip = h('button', {
+    type: 'button', class: `chip-acc ${acc.kind} ${acc.status}`, 'aria-haspopup': 'menu',
+    title: `${acc.email} — ${status}`,
+    onClick: (e) => menu(e.currentTarget, [
+      { label: 'Ricarica', icon: 'refresh', onClick: () => reloadAccount(acc) },
+      { label: 'Rinomina…', icon: 'user', onClick: async () => { const v = await promptDialog({ title: 'Rinomina account', value: acc.label }); if (v !== undefined) app.renameAccount(acc, v); } },
+      acc.status === 'auth' ? { label: 'Accedi di nuovo…', icon: 'lock', onClick: () => openLogin({ account: acc }) } : null,
+      state.accounts.length > 1 ? 'sep' : null,
+      state.accounts.length > 1 ? { label: 'Sposta prima', disabled: at <= 0, onClick: () => app.moveAccountBy(acc, -1) } : null,
+      state.accounts.length > 1 ? { label: 'Sposta dopo', disabled: at >= last, onClick: () => app.moveAccountBy(acc, 1) } : null,
+      'sep',
+      { label: 'Rimuovi account…', icon: 'logout', danger: true, onClick: () => removeAcc(acc) },
+    ].filter(Boolean)),
+    // Alt + frecce: sposta l'account (sinistra/su = prima, destra/giù = dopo)
+    onKeyDown: (e) => {
+      if (!e.altKey) return;
+      const d = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : 0;
+      if (!d) return;
+      e.preventDefault();
+      app.moveAccountBy(acc, d);
+    },
+  }, h('span', { class: 'status-dot' }), kindLogo(acc.kind, 18),
+  h('span', { class: 'chip-label' }, acc.label), dirty ? h('span', { class: 'chip-dirty', title: 'Modifiche non salvate' }, '●') : null);
+
+  // Il contenitore è trascinabile (Firefox non permette di trascinare direttamente un <button>)
+  const wrap = h('div', { class: 'chip-wrap', dataset: { acc: acc.id } }, chip);
+  makeAccountDraggable(wrap, acc.id);
+  wireAccountTarget(wrap, acc.id, {
+    group: () => [wrap],
+    before: (e) => { const r = wrap.getBoundingClientRect(); return e.clientX < r.left + r.width / 2; },
+  });
+  return wrap;
+}
+
 export function renderAccounts(strip) {
-  strip.replaceChildren(...state.accounts.map((acc) => {
-    const dirty = acc.panelIds.some((id) => state.panels.get(id)?.dirty);
-    const chip = h('button', {
-      type: 'button', class: `chip-acc ${acc.kind} ${acc.status}`, 'aria-haspopup': 'menu',
-      title: `${acc.email} — ${acc.status === 'ready' ? 'connesso' : acc.status === 'auth' ? 'accesso richiesto' : acc.status === 'error' ? 'errore' : 'connessione…'}`,
-      onClick: (e) => menu(e.currentTarget, [
-        { label: 'Ricarica', icon: 'refresh', onClick: () => reloadAccount(acc) },
-        { label: 'Rinomina…', icon: 'user', onClick: async () => { const v = await promptDialog({ title: 'Rinomina account', value: acc.label }); if (v !== undefined) app.renameAccount(acc, v); } },
-        acc.status === 'auth' ? { label: 'Accedi di nuovo…', icon: 'lock', onClick: () => openLogin({ account: acc }) } : null,
-        'sep',
-        { label: 'Rimuovi account…', icon: 'logout', danger: true, onClick: () => removeAcc(acc) },
-      ].filter(Boolean)),
-    }, h('span', { class: 'status-dot' }), kindLogo(acc.kind, 18),
-    h('span', { class: 'chip-label' }, acc.label), dirty ? h('span', { class: 'chip-dirty', title: 'Modifiche non salvate' }, '●') : null);
-    return chip;
-  }));
+  // Ricostruire le linguette durante un trascinamento distruggerebbe l'elemento d'origine: si rimanda.
+  if (acctDrag) { renderAccountsLater = true; return; }
+  const focused = strip.contains(document.activeElement) ? document.activeElement.closest('.chip-wrap')?.dataset.acc : null;
+  strip.replaceChildren(...state.accounts.map(accountChip));
+  if (focused) [...strip.children].find((el) => el.dataset.acc === focused)?.querySelector('.chip-acc')?.focus({ preventScroll: true });
 }
 
 async function reloadAccount(acc) {
@@ -544,6 +668,9 @@ export function updateSaveAll() {
 }
 
 export function renderBoard() {
+  // La board si ricostruisce da zero (es. dopo aver spostato un account): si conservano le posizioni di scorrimento.
+  const lists = new Map([...panelEls].map(([id, el]) => [id, el.querySelector('.plist')?.scrollTop ?? 0]));
+  const left = board.scrollLeft;
   panelEls.clear();
   const cards = [];
   for (const acc of state.accounts) {
@@ -557,6 +684,8 @@ export function renderBoard() {
   }
   board.replaceChildren(...(cards.length ? cards : [emptyState()]));
   board.classList.toggle('is-empty', !cards.length);
+  board.scrollLeft = left;
+  for (const [id, top] of lists) { const l = panelEls.get(id)?.querySelector('.plist'); if (l && top) l.scrollTop = top; }
   updateSaveAll();
 }
 

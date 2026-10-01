@@ -1,4 +1,6 @@
 // Persistenza locale. Le password NON vengono mai salvate.
+// Le chiavi si chiamano ancora "streamsync.*" (nome originale del progetto): rinominarle farebbe perdere
+// a chi è già collegato le sessioni salvate, senza alcun vantaggio visibile.
 // - "Ricordami" attivo: il token di sessione va in localStorage (sopravvive alla chiusura del browser).
 // - "Ricordami" spento: il token va in sessionStorage (resta solo finché la scheda è aperta).
 // Attenzione: entrambi sono condivisi con OGNI pagina dello stesso origin (su GitHub Pages:

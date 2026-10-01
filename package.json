@@ -1,14 +1,14 @@
 {
-  "name": "stream-sync",
+  "name": "addon-manager",
   "version": "1.0.0",
   "private": true,
-  "description": "Gestione centralizzata degli addon di più account Nuvio e Stremio",
+  "description": "Addon Manager: gestione centralizzata degli addon di più account Stremio e Nuvio",
   "type": "module",
   "scripts": {
     "start": "node scripts/serve.mjs",
     "test": "node --test tests/unit.test.mjs",
     "test:e2e": "node tests/e2e.mjs",
-    "build": "npm test && rm -rf _site && mkdir _site && cp -r index.html css js img _headers _site/"
+    "build": "npm test && rm -rf _site && mkdir _site && cp -r index.html manifest.webmanifest css js img _headers _site/"
   },
   "license": "MIT"
 }

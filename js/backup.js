@@ -6,7 +6,7 @@ const slim = (i) => ({ url: i.url, name: i.name, enabled: i.enabled !== false })
 
 export function buildExport(lists) {
   return {
-    app: 'streamsync',
+    app: 'addon-manager', // i file esportati da versioni precedenti ('streamsync') si leggono comunque: parseImport non controlla questo campo
     version: 1,
     exportedAt: new Date().toISOString(),
     // Gli URL degli addon possono contenere chiavi personali (es. debrid): tratta il file come un segreto.

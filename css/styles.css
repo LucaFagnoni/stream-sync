@@ -24,7 +24,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* ---- topbar ---- */
 .topbar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
 .brand { display: flex; align-items: center; gap: 8px; font-size: 16px; }
-.logo-mark { width: 26px; height: 26px; display: block; }
+.logo-mark { width: 30px; height: 30px; display: block; flex: none; }
 .empty-logo { width: 72px; height: 72px; margin: 0 auto 14px; display: block; }
 .search { position: relative; flex: 1; max-width: 420px; }
 .search .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); }
@@ -49,6 +49,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* ---- account strip ---- */
 .accounts { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px 4px; }
 .accounts:empty { display: none; }
+.chip-wrap { display: inline-flex; position: relative; border-radius: 999px; }
+.chip-wrap[draggable="true"] .chip-acc { cursor: grab; }
+.chip-wrap.acct-dragging, .panel.acct-dragging { opacity: .45; }
+.chip-wrap.acct-before::before, .chip-wrap.acct-after::after { content: ""; position: absolute; top: -3px; bottom: -3px; width: 4px; border-radius: 2px; background: var(--primary); }
+.chip-wrap.acct-before::before { left: -7px; } .chip-wrap.acct-after::after { right: -7px; }
+.phead[draggable="true"] { cursor: grab; }
+/* indicatore di rilascio di un account: barra sul lato del gruppo di pannelli (colonne: sinistra/destra; telefono: sopra/sotto) */
+.panel.acct-before { box-shadow: -6px 0 0 0 var(--primary); } .panel.acct-after { box-shadow: 6px 0 0 0 var(--primary); }
 .chip-acc { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px 4px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); cursor: pointer; }
 .chip-acc:hover { border-color: var(--border-strong); }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
@@ -177,6 +185,7 @@ textarea { resize: vertical; font: 12.5px ui-monospace, monospace; }
   .top-actions { margin-left: auto; gap: 4px; flex-wrap: nowrap; }
   .top-actions .btn { padding: 0 11px; min-height: 38px; }
   .top-actions .lbl { display: none; }
+  .panel.acct-before { box-shadow: 0 -6px 0 0 var(--primary); } .panel.acct-after { box-shadow: 0 6px 0 0 var(--primary); }
   .count-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #fff; color: var(--primary); font-size: 11px; font-weight: 700; }
   .accounts { padding: 12px 12px 2px; }
   .board { display: flex; flex-direction: column; flex: none; overflow: visible; padding: 20px 12px 28px; gap: 16px; }

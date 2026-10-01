@@ -9,7 +9,7 @@ import {
 import { convertItem } from './convert.js';
 import { fetchManifest } from './manifest.js';
 import { loadStore, saveStore, pushBackup, readSession, deleteBackupsFor, clearAll, STORE_KEY } from './store.js';
-import { uid, pLimit, hashString, stableStringify, idOf, str, toManifestUrl } from './util.js';
+import { uid, pLimit, hashString, stableStringify, idOf, str, toManifestUrl, moveInArray } from './util.js';
 
 export const state = {
   accounts: [],
@@ -248,6 +248,23 @@ export async function forgetEverything() {
 }
 
 export async function reloadAccount(acc) { await connectAccount(acc); }
+
+/**
+ * Sposta un account (con tutti i suoi pannelli) nella posizione `toIndex` dell'elenco.
+ * L'ordine è quello di state.accounts, che viene salvato: le bozze non si toccano.
+ * @returns {boolean} true se l'ordine è cambiato
+ */
+export function moveAccount(acc, toIndex) {
+  const from = state.accounts.indexOf(acc);
+  const to = Math.max(0, Math.min(toIndex, state.accounts.length - 1));
+  if (from < 0 || from === to) return false;
+  state.accounts = moveInArray(state.accounts, from, to);
+  persist();
+  notifyBoard();
+  return true;
+}
+
+export const moveAccountBy = (acc, delta) => moveAccount(acc, state.accounts.indexOf(acc) + delta);
 
 // ---------- salvataggio ----------
 const backupEntry = (panel, remoteItems) => ({

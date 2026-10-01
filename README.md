@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="img/logo.svg" alt="" width="88" height="88">
+  <img src="img/logo.svg" alt="Logo di Addon Manager" width="96" height="96">
 </p>
 
-<h1 align="center">StreamSync</h1>
+<h1 align="center">Addon Manager</h1>
 
 <p align="center">
   Gestisci da un'unica pagina gli addon di più account <b>Stremio</b> e <b>Nuvio</b>:<br>
-  riordinali, aggiornali, copiali da un account all'altro con un trascinamento.
+  riordinali, aggiornali e copiali da un account all'altro.
 </p>
 
 <p align="center">
@@ -14,21 +14,24 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot.png" alt="Schermata di StreamSync con un account Stremio e due profili Nuvio affiancati" width="900">
+  <img src="docs/screenshot.png" alt="Addon Manager su computer: un account Stremio e due profili Nuvio affiancati" width="680">
+  &nbsp;
+  <img src="docs/screenshot-mobile.png" alt="Addon Manager su smartphone: i pannelli sono uno sotto l'altro" width="190">
 </p>
 
 ---
 
-StreamSync è un'applicazione web statica, senza backend: il browser comunica direttamente con le API ufficiali di Stremio e Nuvio. Le password non vengono mai salvate e non transitano da server di terze parti.
+Addon Manager è un'applicazione web statica, senza backend: il browser comunica direttamente con le API ufficiali di Stremio e Nuvio. Le password non vengono mai salvate e non transitano da server di terze parti.
 
 > [!NOTE]
-> Progetto indipendente, non affiliato né approvato da Stremio o Nuvio.
+> Progetto indipendente, non affiliato né approvato da Stremio o Nuvio. Il progetto si chiamava StreamSync: restano il nome del repository e alcune chiavi interne di archiviazione, per non scollegare chi era già connesso.
 
 ## Funzionalità
 
 **Account**
-- Più account Stremio e Nuvio aperti insieme, affiancati in colonne.
+- Più account Stremio e Nuvio aperti insieme, affiancati in colonne (uno sotto l'altro su telefono).
 - Account Nuvio con profili: una colonna per profilo (fino a 6). I profili che usano gli addon del Profilo 1 sono in sola lettura.
+- **Riordino degli account**: trascina una linguetta, oppure l'intestazione di un pannello (si sposta l'account con tutti i suoi profili). In alternativa il menu ⋯ → «Sposta prima / dopo» o <kbd>Alt</kbd> + frecce su una linguetta. L'ordine viene salvato e le modifiche non salvate non si perdono.
 
 **Organizzazione degli addon**
 - **Trascina e rilascia** (da computer) per riordinare una lista o per **copiare** addon in un altro account; tieni premuto <kbd>Maiusc</kbd> mentre rilasci per **spostarli**.
@@ -47,7 +50,7 @@ StreamSync è un'applicazione web statica, senza backend: il browser comunica di
 - Ogni modifica resta una **bozza locale**, con annulla/ripeti, finché non premi «Salva». Un riepilogo (`+2 −1 ~1 ↕`) mostra cosa cambierà.
 - **Sincronizza da…**: copia in una lista gli addon mancanti di un'altra, oppure rendila identica alla sorgente, con anteprima.
 - Importazione ed esportazione in JSON; backup automatico dello stato remoto prima di ogni salvataggio.
-- Tema chiaro e scuro; interfaccia pensata anche per lo smartphone.
+- Tema chiaro e scuro; installabile come app sul telefono.
 
 ## Guida rapida
 
@@ -66,6 +69,7 @@ StreamSync è un'applicazione web statica, senza backend: il browser comunica di
 | <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>S</kbd> | Salva la colonna attiva |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Spostati tra gli addon |
 | <kbd>Alt</kbd> + <kbd>↑</kbd> / <kbd>↓</kbd> | Sposta in su / in giù l'addon con il focus |
+| <kbd>Alt</kbd> + <kbd>←</kbd> / <kbd>→</kbd> | Con il focus su una linguetta di account: la sposta prima / dopo |
 | <kbd>Spazio</kbd> | Seleziona / deseleziona |
 | <kbd>Canc</kbd> | Rimuovi (dalla bozza) |
 
@@ -75,10 +79,13 @@ Sugli schermi stretti i pannelli sono uno sotto l'altro e **scorre solo la pagin
 
 - **Copiare o spostare:** tocca ⋯ accanto all'addon → «Copia in…» o «Sposta in…» → scegli l'account o il profilo.
 - **Più addon insieme:** spunta le caselle, poi usa «Copia» / «Sposta» nella barra che compare in alto.
-- **Riordinare:** frecce ↑ ↓ accanto a ogni addon.
+- **Riordinare gli addon:** frecce ↑ ↓ accanto a ognuno.
+- **Riordinare gli account:** tocca la linguetta dell'account (o ⋯ in un suo pannello) → «Sposta prima» / «Sposta dopo».
 - **Ripiegare una lista:** la freccia in alto a destra del pannello.
 
 Il trascinamento con il dito non è previsto: su touch si usa il menu ⋯.
+
+**Installazione come app.** Dal menu del browser puoi aggiungere Addon Manager alla schermata Home (Chrome: «Installa app» / «Aggiungi a schermata Home»; Safari: Condividi → «Aggiungi alla schermata Home»). Aprendola dall'icona si apre senza la barra del browser. Con «Ricordami» spento la sessione dura finché l'app resta aperta: su un telefono personale conviene attivarlo.
 
 ## Sicurezza e privacy
 
@@ -95,7 +102,7 @@ Il trascinamento con il dito non è previsto: su touch si usa il menu ⋯.
 
 ## Integrità dei dati
 
-Le API di Stremio (`addonCollectionSet`) e Nuvio (`sync_push_addons`) sostituiscono **l'intera lista** a ogni salvataggio. StreamSync è progettato perché questo non porti a perdite:
+Le API di Stremio (`addonCollectionSet`) e Nuvio (`sync_push_addons`) sostituiscono **l'intera lista** a ogni salvataggio. Addon Manager è progettato perché questo non porti a perdite:
 
 - **Conferma esplicita** prima di rimuovere addon; nei dialoghi distruttivi <kbd>Invio</kbd> seleziona l'azione sicura.
 - **Rilevamento dei conflitti.** Se la lista è stata modificata su un altro dispositivo, puoi unire le modifiche (predefinito), ricaricare o sovrascrivere.
@@ -125,19 +132,20 @@ Applicazione statica in JavaScript moderno (moduli ES), senza framework né dipe
 Entrambe le API consentono richieste cross-origin, quindi non serve alcun proxy. Per Nuvio si usa la chiave pubblica ("publishable key") indicata nella documentazione ufficiale.
 
 ```
-index.html, css/, img/     interfaccia, stili, loghi
-js/util.js                 URL, hashing, concorrenza (senza DOM)
-js/stremio.js, nuvio.js    client delle API
-js/manifest.js             download e validazione dei manifest
-js/model.js                bozza, annulla/ripeti, diff, unione a tre vie
-js/convert.js, backup.js   conversione tra servizi, import/export
-js/store.js                persistenza locale
-js/app.js                  controller: account, caricamento, salvataggio, copia
-js/ui/                     componenti dell'interfaccia
-_headers                   intestazioni HTTP (Cloudflare Pages)
-redirect/                  pagina di reindirizzamento del vecchio indirizzo
-scripts/serve.mjs          server di sviluppo
-tests/                     test unitari ed end-to-end
+index.html, manifest.webmanifest   pagina e manifest per l'installazione come app
+css/, img/                         stili, logo e icone (SVG e PNG)
+js/util.js                         URL, hashing, concorrenza (senza DOM)
+js/stremio.js, nuvio.js            client delle API
+js/manifest.js                     download e validazione dei manifest
+js/model.js                        bozza, annulla/ripeti, diff, unione a tre vie
+js/convert.js, backup.js           conversione tra servizi, import/export
+js/store.js                        persistenza locale
+js/app.js                          controller: account, caricamento, salvataggio, copia
+js/ui/                             componenti dell'interfaccia
+_headers                           intestazioni HTTP (Cloudflare Pages)
+redirect/                          pagina di reindirizzamento del vecchio indirizzo
+scripts/serve.mjs                  server di sviluppo
+tests/                             test unitari ed end-to-end
 ```
 
 ## Sviluppo
@@ -163,13 +171,13 @@ npm run test:e2e
 
 ## Pubblicazione
 
-- **Cloudflare Pages** — sito di produzione, collegato a questo repository. A ogni push esegue `npm run build` e pubblica `_site/`, che contiene solo i file dell'app e `_headers`.
+- **Cloudflare Pages** — sito di produzione, collegato a questo repository. A ogni push esegue `npm run build` e pubblica `_site/`, che contiene solo i file dell'app, il manifest e `_headers`.
 - **GitHub Actions** — a ogni push esegue i test unitari ed end-to-end. Le action sono fissate per SHA e aggiornate da Dependabot.
-- **GitHub Pages** — il vecchio indirizzo `lucafagnoni.github.io/stream-sync/` serve solo una pagina che cancella i dati di StreamSync rimasti su quell'origin e reindirizza al sito attuale.
+- **GitHub Pages** — il vecchio indirizzo `lucafagnoni.github.io/stream-sync/` serve solo una pagina che cancella i dati rimasti su quell'origin e reindirizza al sito attuale. Se il repository viene rinominato, quell'indirizzo smette di esistere: apri prima il vecchio link in ogni browser dove hai fatto prove.
 
 ## Riferimenti
 
 - [Stremio API client](https://github.com/Stremio/stremio-api-client)
 - [Documentazione API di Nuvio](https://nuvio.tv/docs)
 
-Stremio e Nuvio sono marchi dei rispettivi proprietari. I loghi in `img/` sono usati solo per indicare a quale servizio appartiene un account.
+Stremio e Nuvio sono marchi dei rispettivi proprietari. I loghi in `img/stremio.png` e `img/nuvio.png` sono usati solo per indicare a quale servizio appartiene un account; il logo di Addon Manager è parte di questo progetto.

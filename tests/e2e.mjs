@@ -145,7 +145,7 @@ async function addAccount(kind, email, pass, { remember = true, on = page } = {}
   await on.click('dialog button[type=submit]');
 }
 
-console.log('\nStreamSync e2e');
+console.log('\nAddon Manager e2e');
 await page.goto(APP);
 const S = 'Stremio s@x.it';
 
@@ -153,6 +153,28 @@ await step('stato iniziale: schermata vuota con invito ad aggiungere un account'
   await page.locator('.empty-state').waitFor();
   assert(await page.locator('#save-all').isDisabled(), 'Salva tutto dovrebbe essere disabilitato');
   eq((await page.locator('#save-all').innerText()).trim(), 'Salva tutto', 'il pulsante non deve mostrare "null" o altro testo');
+});
+
+await step('brand: nome, icone e manifest installabile accettati da Chromium (CSP compresa)', async () => {
+  eq(await page.title(), 'Addon Manager — Stremio e Nuvio');
+  eq((await page.locator('.brand strong').innerText()).trim(), 'Addon Manager');
+  assert(!/StreamSync/i.test(await page.locator('body').innerText()), 'resta il vecchio nome nella pagina');
+  const links = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('link[rel]')].map((l) => [l.rel + (l.type ? ':' + l.type : ''), l.getAttribute('href')])));
+  eq([links.manifest, links['apple-touch-icon'], links['icon:image/svg+xml']], ['manifest.webmanifest', 'img/apple-touch-icon.png', 'img/favicon.svg']);
+  // Il manifest viene scaricato dal browser (non dalla pagina): se la CSP lo bloccasse, getAppManifest riporterebbe errori
+  const cdp = await context.newCDPSession(page);
+  const man = await cdp.send('Page.getAppManifest');
+  eq(man.errors, [], 'il browser non accetta il manifest');
+  const m = JSON.parse(man.data);
+  eq([m.name, m.short_name, m.display], ['Addon Manager', 'Addon Manager', 'standalone']);
+  eq((await cdp.send('Page.getInstallabilityErrors')).installabilityErrors, [], 'l\'app non risulta installabile');
+  for (const icon of m.icons) { // ogni icona esiste ed è un PNG della dimensione dichiarata
+    const r = await page.request.get(new URL(icon.src, APP).href);
+    assert(r.ok() && /image\/png/.test(r.headers()['content-type']), `icona non servita: ${icon.src}`);
+    const buf = await r.body();
+    eq(`${buf.readUInt32BE(16)}x${buf.readUInt32BE(20)}`, icon.sizes, icon.src);
+  }
+  assert(/manifest-src 'self'/.test(await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content')));
 });
 
 await step('desktop: istruzioni per mouse e tastiera (Maiusc, scorciatoia "/"), non quelle per il touch', async () => {
@@ -193,6 +215,89 @@ await step('spazio tra le linguette degli account e i pannelli (desktop)', async
   const first = await page.locator('section.panel').first().boundingBox();
   const gap = Math.round(first.y - (chips.y + chips.height));
   assert(gap >= 20, `spazio troppo stretto: ${gap}px`);
+});
+
+// ---------- riordino degli account ----------
+const panelOrder = () => page.locator('section.panel').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
+const chipOrder = () => page.locator('.chip-wrap .chip-label').allTextContents();
+const NUVIO_PANELS = ['Nuvio Main', 'Nuvio Kids', 'Nuvio Shared'];
+
+await step('account: trascinando una linguetta davanti all\'altra cambiano linguette e pannelli (con indicatore) e l\'ordine resta dopo il reload', async () => {
+  eq(await chipOrder(), ['s@x.it', 'n@x.it']);
+  eq(await panelOrder(), [S, ...NUVIO_PANELS]);
+  const c0 = await page.locator('.chip-wrap').nth(0).boundingBox();
+  const c1 = await page.locator('.chip-wrap').nth(1).boundingBox();
+  await page.mouse.move(c1.x + c1.width / 2, c1.y + c1.height / 2);
+  await page.mouse.down();
+  try {
+    await page.mouse.move(c0.x + 6, c0.y + c0.height / 2, { steps: 8 });
+    // l'emulazione consegna un dragover per ogni movimento: ci si muove ancora un poco sul posto
+    for (let k = 0; k < 3; k++) { await page.mouse.move(c0.x + 6 - k, c0.y + c0.height / 2); await page.waitForTimeout(60); }
+    await page.locator('.chip-wrap.acct-before').waitFor({ timeout: 3000 }); // l'indicatore mostra dove cadrà
+  } finally {
+    await page.mouse.up(); // sempre rilasciato: un fallimento non deve lasciare il mouse premuto
+  }
+  eq(await chipOrder(), ['n@x.it', 's@x.it']);
+  eq(await panelOrder(), [...NUVIO_PANELS, S], 'il gruppo dei 3 profili Nuvio deve muoversi insieme');
+  eq(await page.locator('.acct-before, .acct-after, .acct-dragging').count(), 0, 'segni di trascinamento rimasti');
+  eq(await page.evaluate(() => JSON.parse(localStorage.getItem('streamsync.v1')).accounts.map((a) => a.email)), ['n@x.it', 's@x.it'], 'ordine non salvato');
+  await page.reload();
+  await panel(S).locator('.row').first().waitFor();
+  await panel('Nuvio Main').locator('.row').first().waitFor();
+  eq(await chipOrder(), ['n@x.it', 's@x.it'], 'ordine perso dopo il reload');
+  eq(await panelOrder(), [...NUVIO_PANELS, S]);
+});
+
+await step('account: trascinando l\'intestazione di un pannello si sposta l\'intero account (e si torna indietro)', async () => {
+  // Finestra larga: tutti i pannelli sono visibili, così il test non dipende da uno scorrimento della board a metà trascinamento
+  await page.setViewportSize({ width: 2000, height: 900 });
+  // il pannello Stremio è ora ultimo: lo si porta davanti al gruppo Nuvio (metà sinistra del gruppo)
+  await panel(S).locator('.phead').dragTo(panel('Nuvio Main'), { sourcePosition: { x: 90, y: 24 }, targetPosition: { x: 40, y: 300 } });
+  eq(await panelOrder(), [S, ...NUVIO_PANELS]);
+  eq(await chipOrder(), ['s@x.it', 'n@x.it']);
+  // e dall'intestazione di un profilo Nuvio si sposta TUTTO l'account Nuvio dopo Stremio
+  await panel('Nuvio Kids').locator('.phead').dragTo(panel(S), { sourcePosition: { x: 90, y: 24 }, targetPosition: { x: 400, y: 300 } });
+  eq(await panelOrder(), [S, ...NUVIO_PANELS], 'rilasciare sul lato destro di Stremio lo lascia dove stava (già dopo): ordine invariato');
+  await panel(S).locator('.phead').dragTo(panel('Nuvio Shared'), { sourcePosition: { x: 90, y: 24 }, targetPosition: { x: 300, y: 300 } });
+  eq(await panelOrder(), [...NUVIO_PANELS, S]);
+  await panel(S).locator('.phead').dragTo(panel('Nuvio Main'), { sourcePosition: { x: 90, y: 24 }, targetPosition: { x: 40, y: 300 } });
+  eq(await panelOrder(), [S, ...NUVIO_PANELS]);
+  await page.setViewportSize({ width: 1500, height: 900 });
+});
+
+await step('account: dal menu della linguetta e dei pannelli, e da tastiera (Alt+frecce, focus mantenuto)', async () => {
+  await page.locator('.chip-acc').first().click();
+  assert(await page.locator('.menu-item:has-text("Sposta prima")').isDisabled(), '"Sposta prima" dovrebbe essere disabilitato sul primo');
+  await page.click('.menu-item:has-text("Sposta dopo")');
+  eq(await chipOrder(), ['n@x.it', 's@x.it']);
+  await page.locator('.chip-acc', { hasText: 's@x.it' }).focus();
+  await page.keyboard.press('Alt+ArrowLeft');
+  eq(await chipOrder(), ['s@x.it', 'n@x.it']);
+  assert(await page.evaluate(() => document.activeElement?.classList.contains('chip-acc') && document.activeElement.textContent.includes('s@x.it')), 'il focus si è perso dopo lo spostamento');
+  // dal menu del pannello (un profilo Nuvio sposta l'intero account)
+  await panel(S).locator('button[aria-label="Menu pannello"]').click();
+  await page.click('.menu-item:has-text("Sposta account dopo")');
+  eq(await panelOrder(), [...NUVIO_PANELS, S]);
+  await panel('Nuvio Main').locator('button[aria-label="Menu pannello"]').click();
+  assert(await page.locator('.menu-item:has-text("Sposta account prima")').isDisabled(), 'Nuvio è già primo');
+  await page.click('.menu-item:has-text("Sposta account dopo")');
+  eq(await panelOrder(), [S, ...NUVIO_PANELS]);
+});
+
+await step('account: le bozze non vanno perse spostando gli account', async () => {
+  await row(panel(S), 'Addon B').locator('button[aria-label="Sposta su"]').click();
+  const draft = await names(panel(S));
+  eq((await page.locator('#save-all').innerText()).trim(), 'Salva tutto (1)');
+  await page.locator('.chip-acc').first().click();
+  await page.click('.menu-item:has-text("Sposta dopo")');
+  eq(await panelOrder(), [...NUVIO_PANELS, S]);
+  eq(await names(panel(S)), draft, 'la bozza è cambiata');
+  eq((await page.locator('#save-all').innerText()).trim(), 'Salva tutto (1)');
+  assert(await panel(S).evaluate((el) => el.classList.contains('dirty')), 'il pannello non risulta più modificato');
+  await panel(S).locator('button:has-text("Annulla")').first().click();
+  await page.locator('.chip-acc', { hasText: 's@x.it' }).click();
+  await page.click('.menu-item:has-text("Sposta prima")');
+  eq(await panelOrder(), [S, ...NUVIO_PANELS]);
 });
 
 await step('nessuna password in localStorage, solo i token di sessione', async () => {
@@ -732,6 +837,23 @@ await step('telefono: copia con il tocco (⋯ → Copia in… → Luca/Main)', a
   await mpage.locator('.menu-item:has-text("Main")').tap();
   await mpage.locator('.toast', { hasText: /Copiati 1 in «Main»/ }).waitFor();
   await mp('Nuvio Main').locator('.row', { hasText: 'Addon generato 2' }).waitFor();
+});
+
+await step('telefono: riordino degli account dal menu del pannello, senza perdere la posizione di scorrimento', async () => {
+  await mpage.evaluate(() => window.scrollTo(0, 900));
+  await settle();
+  const order = () => mpage.locator('section.panel').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
+  eq((await order())[0], 'Stremio s@x.it');
+  await mp('Stremio s@x.it').locator('button[aria-label="Menu pannello"]').tap();
+  await mpage.locator('.menu-item:has-text("Sposta account dopo")').tap();
+  eq(await order(), ['Nuvio Main', 'Nuvio Kids', 'Nuvio Shared', 'Stremio s@x.it']);
+  const y = await mpage.evaluate(() => Math.round(scrollY));
+  assert(y > 0, `la pagina è tornata in cima (scrollY=${y})`);
+  await mpage.evaluate(() => window.scrollTo(0, 0));
+  await settle();
+  await mpage.locator('.chip-acc', { hasText: 's@x.it' }).tap();
+  await mpage.locator('.menu-item:has-text("Sposta prima")').tap();
+  eq(await order(), ['Stremio s@x.it', 'Nuvio Main', 'Nuvio Kids', 'Nuvio Shared']);
 });
 
 await step('telefono: barra di selezione su una riga con le parole brevi; "Salva tutto" senza "null"', async () => {

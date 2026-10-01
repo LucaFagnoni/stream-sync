@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseAddonUrl, toManifestUrl, idOf, baseUrl, extractUrls, pLimit, isHttpUrl } from '../js/util.js';
+import { parseAddonUrl, toManifestUrl, idOf, baseUrl, extractUrls, pLimit, isHttpUrl, moveInArray } from '../js/util.js';
+import { buildExport, parseImport } from '../js/backup.js';
 import { Panel, makeItem, planMirror, applyMirror, diffLists, rebaseOnRemote, mergeThreeWay } from '../js/model.js';
 import { convertItem } from '../js/convert.js';
 import { fromDescriptor, toDescriptor, getAddons, setAddons, login as stremioLogin, StremioError } from '../js/stremio.js';
@@ -504,4 +505,26 @@ test('parseAddonUrl / toManifestUrl non ricodificano mai l\'URL dell\'utente', (
 test('idOf: `|` e `%7C`, `,` e `%2C` indicano lo stesso addon', () => {
   assert.equal(idOf('https://t.test/a,b|c/manifest.json'), idOf('https://t.test/a%2Cb%7Cc/manifest.json'));
   assert.notEqual(idOf('https://t.test/a%2Fb/manifest.json'), idOf('https://t.test/a/b/manifest.json'));
+});
+
+test('moveInArray: sposta avanti/indietro, ai bordi, ignora indici non validi e non muta l\'originale', () => {
+  assert.deepEqual(moveInArray(['a', 'b', 'c', 'd'], 0, 2), ['b', 'c', 'a', 'd']);
+  assert.deepEqual(moveInArray(['a', 'b', 'c', 'd'], 3, 0), ['d', 'a', 'b', 'c']);
+  assert.deepEqual(moveInArray(['a', 'b', 'c'], 1, 99), ['a', 'c', 'b']);
+  assert.deepEqual(moveInArray(['a', 'b', 'c'], 1, -5), ['b', 'a', 'c']);
+  assert.deepEqual(moveInArray(['a', 'b'], 5, 0), ['a', 'b']);
+  assert.deepEqual(moveInArray(['a', 'b'], -1, 0), ['a', 'b']);
+  const src = ['a', 'b'];
+  moveInArray(src, 0, 1);
+  assert.deepEqual(src, ['a', 'b']);
+});
+
+test('backup: l\'esportazione si rilegge e i file della versione precedente (app: "streamsync") restano importabili', () => {
+  const items = [{ url: 'https://a.test/x,y|z/manifest.json', name: 'A', enabled: false }];
+  const exported = buildExport([{ title: 'Luca', account: 'Famiglia', kind: 'nuvio', items }]);
+  assert.equal(exported.app, 'addon-manager');
+  const back = parseImport(JSON.stringify(exported));
+  assert.deepEqual(back, [{ title: 'Famiglia · Luca', items: [{ url: 'https://a.test/x,y|z/manifest.json', name: 'A', enabled: false }] }]);
+  const legacy = { app: 'streamsync', version: 1, lists: [{ title: 'Vecchia', account: 'Casa', addons: [{ url: 'https://b.test/manifest.json', name: 'B', enabled: true }] }] };
+  assert.deepEqual(parseImport(JSON.stringify(legacy)), [{ title: 'Casa · Vecchia', items: [{ url: 'https://b.test/manifest.json', name: 'B', enabled: true }] }]);
 });
