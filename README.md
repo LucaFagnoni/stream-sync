@@ -1,86 +1,164 @@
-# StreamSync
+<p align="center">
+  <img src="img/logo.svg" alt="" width="88" height="88">
+</p>
 
-Pagina web statica per gestire da un unico posto gli addon di **più account Nuvio e Stremio**: riordinarli, aggiornarli, copiare i manifest e trascinarli da un account all'altro.
+<h1 align="center">StreamSync</h1>
 
-Nessun backend: il browser parla direttamente con `api.strem.io` e `api.nuvio.tv` (entrambi con CORS aperto). Le credenziali non passano da nessun server terzo.
+<p align="center">
+  Gestisci da un'unica pagina gli addon di più account <b>Stremio</b> e <b>Nuvio</b>:<br>
+  riordinali, aggiornali, copiali da un account all'altro con un trascinamento.
+</p>
 
-## Avvio
+<p align="center">
+  <a href="https://addonmanager.pages.dev/"><b>addonmanager.pages.dev</b></a>
+</p>
 
-Online: **https://addonmanager.pages.dev/** (Cloudflare Pages: origin dedicato e intestazioni HTTP di sicurezza).
+<p align="center">
+  <img src="docs/screenshot.png" alt="Schermata di StreamSync con un account Stremio e due profili Nuvio affiancati" width="900">
+</p>
 
-In locale:
+---
 
-```bash
-npm start            # http://localhost:8080 (solo loopback)
+StreamSync è un'applicazione web statica, senza backend: il browser comunica direttamente con le API ufficiali di Stremio e Nuvio. Le password non vengono mai salvate e non transitano da server di terze parti.
+
+> [!NOTE]
+> Progetto indipendente, non affiliato né approvato da Stremio o Nuvio.
+
+## Funzionalità
+
+**Account**
+- Più account Stremio e Nuvio aperti insieme, affiancati in colonne.
+- Account Nuvio con profili: una colonna per profilo (fino a 6). I profili che usano gli addon del Profilo 1 sono in sola lettura.
+
+**Organizzazione degli addon**
+- **Trascina e rilascia** per riordinare una lista o per **copiare** addon in un altro account. Con <kbd>Maiusc</kbd> al rilascio l'addon viene **spostato**.
+- Scorrimento automatico vicino ai bordi, per raggiungere colonne fuori schermo durante il trascinamento.
+- Selezione multipla (con <kbd>Maiusc</kbd>+clic per un intervallo) e azioni di gruppo: copia, sposta, rimuovi, attiva/disattiva (Nuvio).
+- Alternative ai gesti, anche da touch: menu «Copia in…» / «Sposta in…» e riordino da tastiera.
+- Ricerca istantanea su tutte le liste e ordinamento alfabetico.
+
+**Manifest e manutenzione**
+- Copia l'URL del manifest, il link `stremio://` o il manifest JSON completo, oppure tutti gli URL di una lista.
+- Apri il manifest o la pagina di configurazione dell'addon.
+- **Verifica e aggiorna**: scarica di nuovo i manifest e segnala gli addon non raggiungibili. Su Stremio i manifest cambiati vengono aggiornati nella bozza, con l'indicazione della versione (`2.0.0 → 3.0.0`).
+- Aggiunta da URL (uno o più, anche `stremio://`) con verifica del manifest, oppure trascinando un link da un'altra pagina.
+
+**Bozza, backup e sincronizzazione**
+- Ogni modifica resta una **bozza locale**, con annulla/ripeti, finché non premi «Salva». Un riepilogo (`+2 −1 ~1 ↕`) mostra cosa cambierà.
+- **Sincronizza da…**: copia in una lista gli addon mancanti di un'altra, oppure rendila identica alla sorgente, con anteprima.
+- Importazione ed esportazione in JSON; backup automatico dello stato remoto prima di ogni salvataggio.
+- Tema chiaro e scuro, interfaccia utilizzabile anche da smartphone.
+
+## Guida rapida
+
+1. Apri [addonmanager.pages.dev](https://addonmanager.pages.dev/) e premi **+ Account**.
+2. Scegli Stremio o Nuvio e accedi con email e password. Attiva «Ricordami» solo su un dispositivo personale.
+3. Organizza gli addon: trascinali, riordinali, aggiungili da URL. Finché non salvi, nulla cambia sui server.
+4. Premi **Salva** sulla colonna (o **Salva tutto**). Se rimuovi addon, ti viene chiesta una conferma con l'elenco.
+
+### Scorciatoie da tastiera
+
+| Tasti | Azione |
+|---|---|
+| <kbd>/</kbd> | Cerca in tutte le liste (<kbd>Esc</kbd> per azzerare) |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd> | Annulla nella colonna attiva |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Maiusc</kbd> + <kbd>Z</kbd> | Ripeti |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>S</kbd> | Salva la colonna attiva |
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Spostati tra gli addon |
+| <kbd>Alt</kbd> + <kbd>↑</kbd> / <kbd>↓</kbd> | Sposta in su / in giù l'addon con il focus |
+| <kbd>Spazio</kbd> | Seleziona / deseleziona |
+| <kbd>Canc</kbd> | Rimuovi (dalla bozza) |
+
+## Sicurezza e privacy
+
+- **Credenziali.** La password serve solo a ottenere un token di sessione e non viene mai memorizzata. Il token viene conservato:
+  - con «Ricordami» spento (impostazione predefinita) in `sessionStorage`, cioè finché la scheda resta aperta;
+  - con «Ricordami» attivo in `localStorage`, anche dopo la chiusura del browser.
+- **Revoca.** Il token Stremio non scade da solo. *Backup → «Esci da tutto e cancella i dati locali»* lo invalida sul server e cancella ogni dato salvato nel browser. La disconnessione da Nuvio usa `scope=local`, così le altre app restano collegate.
+- **Isolamento.** L'app è pubblicata su un dominio dedicato, con intestazioni HTTP di sicurezza:
+  - Content-Security-Policy restrittiva, con Trusted Types e `frame-ancestors 'none'`;
+  - `X-Frame-Options`, `nosniff`, HSTS, `no-referrer`.
+- **Dati non fidati.** Nomi, descrizioni e loghi degli addon vengono trattati come testo non fidato, anche quando il manifest è malformato. Nessun `innerHTML` con dati esterni.
+- **Nessun tracciamento.** Non ci sono analytics, cookie o risorse di terze parti: loghi e font sono locali o di sistema.
+- **URL degli addon.** Spesso contengono chiavi personali (per esempio `realdebrid=…`). Backup, esportazioni e «Copia tutti gli URL» le includono: trattali come dati riservati. Gli URL vengono salvati esattamente come sono stati inseriti, senza ricodifiche.
+
+## Integrità dei dati
+
+Le API di Stremio (`addonCollectionSet`) e Nuvio (`sync_push_addons`) sostituiscono **l'intera lista** a ogni salvataggio. StreamSync è progettato perché questo non porti a perdite:
+
+- **Conferma esplicita** prima di rimuovere addon; nei dialoghi distruttivi <kbd>Invio</kbd> seleziona l'azione sicura.
+- **Rilevamento dei conflitti.** Se la lista è stata modificata su un altro dispositivo, puoi unire le modifiche (predefinito), ricaricare o sovrascrivere.
+- **Unione a tre vie.** L'unione conserva le modifiche di entrambe le parti. Gli addon che non hai toccato prendono la versione attuale del server.
+- **Campi conservati.** I campi del descrittore Stremio che l'app non gestisce vengono mantenuti.
+- **Backup automatico** dello stato remoto prima di ogni scrittura: ultimi 25, eliminati insieme all'account.
+- **Verifica dopo la scrittura.** Dopo il salvataggio la lista viene riletta; dopo un timeout si verifica se la scrittura è comunque avvenuta.
+- **Ordine di «Salva tutto».** Prima vengono salvate le liste che ricevono addon, poi quelle che li perdono: uno spostamento interrotto lascia un duplicato, mai una perdita.
+
+## Limitazioni note
+
+- **Verifica dei manifest.** Il browser non distingue un server offline da uno che non consente richieste cross-origin. Su Nuvio un addon non verificabile si può aggiungere comunque, perché basta l'URL. Su Stremio serve il manifest completo, quindi non si può.
+- **URL `http://`.** Vengono bloccati dal browser, perché la pagina è servita in HTTPS (fa eccezione `localhost`).
+- **Addon protetti di Stremio** (per esempio Cinemeta): non si possono rimuovere.
+- **Accesso a Stremio.** Solo con email e password; gli accessi tramite Facebook o Apple non sono supportati.
+- **Manifest su Nuvio.** Il server non conserva il manifest, quindi «aggiorna» si limita al nome e allo stato dell'addon.
+
+## Architettura
+
+Applicazione statica in JavaScript moderno (moduli ES), senza framework né dipendenze di runtime.
+
+| Servizio | Endpoint utilizzati |
+|---|---|
+| Stremio — `api.strem.io` | `login`, `logout`, `addonCollectionGet`, `addonCollectionSet` |
+| Nuvio — `api.nuvio.tv` | `auth/v1/token` (accesso e rinnovo), `auth/v1/logout`, `rest/v1/addons`, RPC `sync_pull_profiles` e `sync_push_addons` |
+
+Entrambe le API consentono richieste cross-origin, quindi non serve alcun proxy. Per Nuvio si usa la chiave pubblica ("publishable key") indicata nella documentazione ufficiale.
+
+```
+index.html, css/, img/     interfaccia, stili, loghi
+js/util.js                 URL, hashing, concorrenza (senza DOM)
+js/stremio.js, nuvio.js    client delle API
+js/manifest.js             download e validazione dei manifest
+js/model.js                bozza, annulla/ripeti, diff, unione a tre vie
+js/convert.js, backup.js   conversione tra servizi, import/export
+js/store.js                persistenza locale
+js/app.js                  controller: account, caricamento, salvataggio, copia
+js/ui/                     componenti dell'interfaccia
+_headers                   intestazioni HTTP (Cloudflare Pages)
+redirect/                  pagina di reindirizzamento del vecchio indirizzo
+scripts/serve.mjs          server di sviluppo
+tests/                     test unitari ed end-to-end
 ```
 
-Non serve build né dipendenze: la cartella si può pubblicare così com'è su qualsiasi hosting statico.
+## Sviluppo
 
-## Funzioni
+Requisiti: Node.js 22 o superiore. Non ci sono dipendenze da installare.
 
-- **Più account insieme**: Stremio (una lista) e Nuvio (fino a 6 profili, una lista ciascuno), affiancati.
-- **Drag & drop**: riordina nella stessa lista (avvicinandoti a un bordo la board e le liste scorrono, per raggiungere i pannelli fuori schermo); trascina in un'altra lista per **copiare**; tieni **Maiusc** al rilascio per **spostare**. Selezione multipla con checkbox (Maiusc+click per intervalli). In alternativa ai gesti: menu «Copia in… / Sposta in…» (utile da touch) e `Alt+↑/↓` per riordinare da tastiera.
-- **Bozza + Salva**: ogni modifica resta locale (con undo/redo, `Ctrl+Z`) finché non premi *Salva* (`Ctrl+S`). Il riepilogo `+2 −1 ~1 ↕` mostra cosa cambierà.
-- **Copia manifest**: URL, link `stremio://`, JSON completo, tutti gli URL di una lista; apri manifest e pagina di configurazione.
-- **Verifica e aggiorna**: riscarica i manifest; su Stremio i manifest cambiati finiscono nella bozza (con badge versione `2.0.0 → 3.0.0`), su Nuvio si aggiorna il nome e si mostra lo stato (online / non raggiungibile).
-- **Aggiungi da URL** (anche più righe, `stremio://` incluso) con verifica del manifest, **importa/esporta** JSON, **Sincronizza da…** tra due liste (aggiungi i mancanti oppure specchio esatto con anteprima).
-- Attiva/disattiva addon (Nuvio), ricerca globale (`/`), tema chiaro/scuro, backup automatici prima di ogni scrittura.
+```bash
+npm start          # server locale su http://localhost:8080
+npm test           # test unitari
+npm run build      # test unitari + copia dei soli file pubblicabili in _site/
+```
 
-## Sicurezza e integrità dei dati
+I test end-to-end usano Playwright con Chromium e simulano le API di Stremio, Nuvio e degli addon:
 
-- **Le password non vengono mai salvate.** Solo i token di sessione:
-  - «Ricordami» **spento (default)** → token in `sessionStorage`: vale finché la scheda resta aperta;
-  - «Ricordami» acceso → token in `localStorage`: resta anche dopo la chiusura del browser.
-- ⚠️ **Origin condiviso su GitHub Pages** (motivo per cui l'app ora è su Cloudflare). `lucafagnoni.github.io/stream-sync/` ha lo stesso origin di `lucafagnoni.github.io` e di ogni altro tuo progetto Pages: tutte quelle pagine possono leggere lo stesso `localStorage` (e il `sessionStorage`, se aperte nella stessa scheda), quindi anche i token. Oggi su quell'origin c'è un sito con jQuery 3.3.1 e nessuna CSP. Per usare «Ricordami» in modo sicuro pubblica l'app su un **origin dedicato** (dominio personalizzato, oppure un account/organizzazione GitHub usato solo per questa app).
-- Un token Stremio (`authKey`) non scade da solo: se temi che sia stato esposto usa **Backup → «Esci da tutto e cancella i dati locali»**, che lo invalida sul server.
-- **Content-Security-Policy** restrittiva (script solo dalla stessa origine, nessun plugin) con **Trusted Types**: nessun `innerHTML` con dati esterni. Nomi, descrizioni e loghi degli addon sono trattati come non fidati, anche se malformati.
-- **Anti-clickjacking**: dentro un iframe di un altro sito la pagina non carica account né chiama le API (GitHub Pages non permette l'header `frame-ancestors`).
-- **Attenzione agli URL degli addon**: spesso contengono chiavi personali (es. `realdebrid=…`). Backup, export e «Copia tutti gli URL» le includono. Gli URL non vengono mai ricodificati: si salvano esattamente come li hai incollati.
-- Il salvataggio **sostituisce l'intera lista** (così funzionano `addonCollectionSet` e `sync_push_addons`), quindi:
-  - conferma esplicita quando rimuovi addon (l'Invio seleziona «Annulla»);
-  - se la lista è cambiata su un altro dispositivo: **Unisci** (predefinito, non perde le modifiche di nessuno), Ricarica o Sovrascrivi;
-  - gli addon che non hai toccato prendono la versione attuale del server (manifest/nomi aggiornati altrove non vengono riportati indietro);
-  - campi del descrittore Stremio che l'app non conosce vengono conservati;
-  - backup automatico dello stato remoto prima di ogni scrittura (ultimi 25, cancellati insieme all'account);
-  - rilettura dopo la scrittura; dopo un timeout si verifica se la scrittura è comunque avvenuta;
-  - «Salva tutto» salva prima le liste che ricevono addon e poi quelle che li perdono.
-- La rimozione di un account Nuvio usa `logout?scope=local`: non disconnette le altre app. Un errore di rete durante il rinnovo del token non fa perdere la sessione; più schede aperte condividono il token ruotato.
+```bash
+npm install --no-save playwright@1.56.1
+npx playwright install chromium
+npm run test:e2e
+```
 
-## Limiti noti
-
-- Il browser non distingue «server offline» da «CORS non consentito». Su **Nuvio** un addon non verificabile si può aggiungere comunque (serve solo l'URL); su **Stremio** serve il manifest completo, quindi non si può.
-- Gli URL `http://` sono bloccati dal browser su una pagina `https://` (tranne `localhost`).
-- Stremio: gli addon *protetti* (es. Cinemeta) non sono rimovibili. Nuvio: i profili che usano gli addon del Profilo 1 sono in sola lettura.
-- Accessi Stremio solo via email/password (non Facebook/Apple). Non si creano account da qui.
-- Su Nuvio il server non conserva il manifest, quindi «aggiorna» si limita al nome.
+> [!IMPORTANT]
+> I test end-to-end usano server simulati costruiti sulla documentazione ufficiale: non vengono eseguiti contro account reali.
 
 ## Pubblicazione
 
-**Cloudflare Pages (consigliato: origin dedicato + intestazioni HTTP di sicurezza).** Collegamento Git con:
-build command `npm run build`, output `_site`, variabile `NODE_VERSION=22`. La build esegue gli unit test
-e pubblica solo `index.html`, `css/`, `js/`, `img/` e `_headers` (CSP con `frame-ancestors`, `X-Frame-Options`, `nosniff`, HSTS).
+- **Cloudflare Pages** — sito di produzione, collegato a questo repository. A ogni push esegue `npm run build` e pubblica `_site/`, che contiene solo i file dell'app e `_headers`.
+- **GitHub Actions** — a ogni push esegue i test unitari ed end-to-end. Le action sono fissate per SHA e aggiornate da Dependabot.
+- **GitHub Pages** — il vecchio indirizzo `lucafagnoni.github.io/stream-sync/` serve solo una pagina che cancella i dati di StreamSync rimasti su quell'origin e reindirizza al sito attuale.
 
-**GitHub Pages (solo reindirizzamento).** `.github/workflows/pages.yml` esegue unit test ed end-to-end a ogni push e pubblica su `lucafagnoni.github.io/stream-sync/` soltanto `redirect/`: una pagina che cancella i dati StreamSync rimasti su quel vecchio origin condiviso e rimanda al nuovo indirizzo. Le action sono fissate per SHA e aggiornate da Dependabot.
+## Riferimenti
 
-## Test
+- [Stremio API client](https://github.com/Stremio/stremio-api-client)
+- [Documentazione API di Nuvio](https://nuvio.tv/docs)
 
-```bash
-npm test             # unit: URL, bozza/undo, unione a tre vie, client API (body esatti, refresh token), storage
-npm run test:e2e     # Chromium (Playwright) contro mock di Stremio, Nuvio e degli host addon
-```
-
-I test e2e usano **mock** costruiti sulla documentazione: non sono stati eseguiti contro account reali.
-
-## Struttura
-
-```
-index.html  css/styles.css
-js/util.js manifest.js stremio.js nuvio.js     # rete e utilità (senza DOM)
-js/model.js convert.js backup.js store.js      # bozza, conversione, import/export, persistenza
-js/app.js                                      # controller (account, salvataggio, copia)
-js/ui/dom.js views.js dialogs.js  js/main.js   # interfaccia
-```
-
-I loghi in `img/` sono marchi di Stremio e Nuvio, scaricati dai rispettivi siti ufficiali e usati solo per indicare a quale servizio appartiene un account. Sono serviti in locale, così la pagina non contatta siti terzi.
-
-Riferimenti: [stremio-api-client](https://github.com/Stremio/stremio-api-client) · [Nuvio API](https://nuvio.tv/docs)
+Stremio e Nuvio sono marchi dei rispettivi proprietari. I loghi in `img/` sono usati solo per indicare a quale servizio appartiene un account.
