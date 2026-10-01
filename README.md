@@ -101,16 +101,17 @@ Il trascinamento con il dito non è previsto: su touch si usa il menu ⋯.
 ## Sicurezza e privacy
 
 - **Credenziali.** La password serve solo a ottenere un token di sessione e non viene mai memorizzata. Il token viene conservato:
-  - con «Ricordami» spento (impostazione predefinita) in `sessionStorage`, cioè finché la scheda resta aperta;
+  - con «Ricordami» spento (impostazione predefinita) in `sessionStorage`, insieme a email, nome e backup automatici dell'account: chiusa la scheda non resta nulla nel browser;
   - con «Ricordami» attivo in `localStorage`, anche dopo la chiusura del browser.
-- **Revoca.** Il token Stremio non scade da solo. *Backup → «Esci da tutto e cancella i dati locali»* lo invalida sul server e cancella ogni dato salvato nel browser. La disconnessione da Nuvio usa `scope=local`, così le altre app restano collegate.
+- **Revoca.** Il token Stremio non scade da solo. *Backup → «Esci da tutto e cancella i dati locali»* lo invalida sul server e cancella ogni dato salvato nel browser, anche nelle altre schede aperte dell'app (che altrimenti riscriverebbero token ed email). Allo stesso modo un account rimosso in una scheda sparisce dalle altre. La disconnessione da Nuvio usa `scope=local`, così le altre app restano collegate.
 - **Isolamento.** L'app è pubblicata su un dominio dedicato, con intestazioni HTTP di sicurezza:
   - Content-Security-Policy restrittiva, con Trusted Types e `frame-ancestors 'none'`;
   - `X-Frame-Options`, `nosniff`, HSTS, `no-referrer`.
 - **Dati non fidati.** Nomi, descrizioni e loghi degli addon vengono trattati come testo non fidato, anche quando il manifest è malformato. Nessun `innerHTML` con dati esterni.
 - **Service worker.** Salva in cache solo i file statici dell'app. Non tocca le richieste verso Stremio, Nuvio e gli addon, né token o dati dell'utente. Con la rete disponibile serve sempre i file aggiornati; la copia in cache si usa solo offline.
-- **Nessun tracciamento.** Non ci sono analytics, cookie o risorse di terze parti: loghi e font sono locali o di sistema.
-- **URL degli addon.** Spesso contengono chiavi personali (per esempio `realdebrid=…`). Backup, esportazioni e «Copia tutti gli URL» le includono: trattali come dati riservati. Gli URL vengono salvati esattamente come sono stati inseriti, senza ricodifiche.
+- **Nessun tracciamento.** Non ci sono analytics, cookie o script di terze parti; logo dell'app e font sono locali o di sistema. Le icone degli addon invece vengono caricate dall'indirizzo scritto nel loro manifest (senza referrer né cookie): chi gestisce quell'indirizzo vede l'IP di chi apre la pagina, come succede nelle app Stremio e Nuvio.
+- **URL degli addon.** Spesso contengono chiavi personali (per esempio `realdebrid=…`). A schermo, nei tooltip e nei dialoghi si mostra solo il dominio (`https://host/…/manifest.json`), così una condivisione dello schermo non le espone. Backup, esportazioni e «Copia URL» invece le includono: trattali come dati riservati. Gli URL vengono salvati esattamente come sono stati inseriti, senza ricodifiche.
+- **Input malevoli.** Testo incollato, trascinato o importato da file passa da un parser in tempo lineare con un limite di lunghezza per URL (16 KB): un contenuto costruito ad arte non può bloccare la pagina (ReDoS).
 
 ## Integrità dei dati
 

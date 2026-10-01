@@ -4,7 +4,7 @@ import { planMirror } from '../model.js';
 import { buildExport, parseImport } from '../backup.js';
 import { listBackups } from '../store.js';
 import { installSection } from './install-ui.js';
-import { extractUrls, idOf, hostOf, str } from '../util.js';
+import { extractUrls, idOf, hostOf, str, shownName } from '../util.js';
 
 const field = (label, input, hint) =>
   h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), input, hint ? h('span', { class: 'field-hint' }, hint) : null);
@@ -54,7 +54,7 @@ export function openLogin({ account } = {}) {
     field('Password', pass, 'Non viene mai salvata: serve solo a ottenere un token di sessione.'),
     account ? null : field('Nome', label),
     h('label', { class: 'check' }, remember, h('span', null, 'Ricordami su questo browser ',
-      h('small', null, 'Salva il token di sessione in modo permanente. È leggibile da chi usa questo browser e da ogni altra pagina dello stesso dominio: attivalo solo su un dispositivo tuo. Se spento, l\'accesso dura finché la scheda resta aperta.'))),
+      h('small', null, 'Salva il token di sessione in modo permanente. È leggibile da chi usa questo browser e da ogni altra pagina dello stesso dominio: attivalo solo su un dispositivo tuo. Se spento, chiusa la scheda non resta nulla in questo browser (né token, né email, né backup).'))),
     err,
     h('div', { class: 'dialog-actions' },
       h('button', { type: 'button', class: 'btn', onClick: () => close(false) }, 'Annulla'), submit));
@@ -197,7 +197,7 @@ export function openMirror(dst) {
 
     const render = () => {
       const plan = planMirror(dst.items, src().items, mode);
-      const names = (list) => list.slice(0, 6).map((i) => i.name).join(', ') + (list.length > 6 ? `, … (+${list.length - 6})` : '');
+      const names = (list) => list.slice(0, 6).map(shownName).join(', ') + (list.length > 6 ? `, … (+${list.length - 6})` : '');
       fill(preview,
         h('p', null, h('strong', null, `${plan.add.length}`), ' da aggiungere', plan.add.length ? `: ${names(plan.add)}` : ''),
         mode === 'mirror' ? h('p', { class: plan.remove.length ? 'warn-text' : '' }, h('strong', null, `${plan.remove.length}`), ' da rimuovere', plan.remove.length ? `: ${names(plan.remove)}` : '') : null,
@@ -272,7 +272,7 @@ export function openBackups() {
 }
 
 // ---------- conferme di salvataggio ----------
-const names = (list, max = 8) => h('ul', { class: 'name-list' }, ...list.slice(0, max).map((i) => h('li', null, i.name)),
+const names = (list, max = 8) => h('ul', { class: 'name-list' }, ...list.slice(0, max).map((i) => h('li', null, shownName(i))),
   list.length > max ? h('li', { class: 'muted' }, `… e altri ${list.length - max}`) : null);
 
 export async function confirmSave(panel, diff) {

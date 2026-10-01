@@ -13,9 +13,19 @@ export const arr = (v) => (Array.isArray(v) ? v : []);
  * e il frammento #…). Ricostruirla con URL#toString() la altererebbe: Chromium, ad esempio, trasforma
  * `|` in `%7C`, e gli URL degli addon contengono configurazioni e chiavi personali.
  */
+/** Oltre questa lunghezza non è un URL di addon reale (le configurazioni cifrate arrivano a pochi KB). */
+export const MAX_URL_LENGTH = 16384;
+
+/** Toglie i caratteri finali presenti in `chars` in tempo lineare (una regex `[…]+$` è quadratica: ReDoS). */
+export function trimEndChars(s, chars) {
+  let end = s.length;
+  while (end > 0 && chars.includes(s[end - 1])) end--;
+  return s.slice(0, end);
+}
+
 export function parseAddonUrl(input) {
   let s = String(input ?? '').trim();
-  if (!s) return null;
+  if (!s || s.length > MAX_URL_LENGTH) return null;
   s = s.replace(/^stremio:\/\//i, 'https://');
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) s = 'https://' + s;
   s = s.replace(/#.*$/s, '');
@@ -43,7 +53,7 @@ export function toManifestUrl(input) {
   const parsed = parseAddonUrl(input);
   if (!parsed) return String(input ?? '').trim();
   const [path, query] = splitQuery(parsed);
-  const trimmed = path.replace(/\/+$/, '');
+  const trimmed = trimEndChars(path, '/');
   return (/\/manifest\.json$/i.test(trimmed) ? trimmed : trimmed + '/manifest.json') + query;
 }
 
@@ -69,9 +79,24 @@ export function idOf(input) {
   const parsed = parseAddonUrl(input);
   if (!parsed) return String(input ?? '').trim().toLowerCase();
   const u = new URL(parsed);
-  const path = u.pathname.replace(/\/+$/, '').replace(/\/manifest\.json$/i, '').replace(/\/+$/, '');
+  const path = trimEndChars(trimEndChars(u.pathname, '/').replace(/\/manifest\.json$/i, ''), '/');
   return u.host.toLowerCase() + decodeSafe(path) + decodeSafe(u.search);
 }
+
+/**
+ * URL da MOSTRARE (tooltip, elenchi): solo schema e host. Il percorso e la query degli addon configurati
+ * contengono spesso chiavi personali (es. debrid) che non devono comparire a schermo o in una condivisione dello schermo.
+ */
+export function maskUrl(input) {
+  const parsed = parseAddonUrl(input);
+  if (!parsed) return '';
+  const u = new URL(parsed);
+  const path = trimEndChars(u.pathname, '/').replace(/\/manifest\.json$/i, '');
+  return `${u.protocol}//${u.host}${path ? '/…' : ''}/manifest.json${u.search ? '?…' : ''}`;
+}
+
+/** Nome da mostrare: se l'addon non ha un nome (Nuvio usa l'URL come ripiego) si mostra l'host, mai l'URL. */
+export const shownName = (item) => (item?.name && item.name !== item.url ? String(item.name) : hostOf(item?.url) || 'addon');
 
 export function hostOf(input) {
   try {
@@ -152,7 +177,8 @@ export function extractUrls(text) {
   const seen = new Set();
   const out = [];
   for (const raw of found) {
-    const url = parseAddonUrl(raw.replace(/[.,;:!?)\]}]+$/, ''));
+    if (raw.length > MAX_URL_LENGTH) continue;
+    const url = parseAddonUrl(trimEndChars(raw, '.,;:!?)]}'));
     if (!url) continue;
     const id = idOf(url);
     if (seen.has(id)) continue;

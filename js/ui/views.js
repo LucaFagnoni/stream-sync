@@ -1,7 +1,7 @@
 import { h, icon, iconButton, menu, toast, copyText, confirmDialog, kindLogo, fill } from './dom.js';
 import * as app from '../app.js';
 import { isProtected } from '../model.js';
-import { baseUrl, hostOf, str, arr, isHttpUrl, extractUrls } from '../util.js';
+import { baseUrl, hostOf, str, arr, isHttpUrl, extractUrls, maskUrl, shownName } from '../util.js';
 import { fetchManifest } from '../manifest.js';
 import { openLogin, openInstall, openImport, openMirror, exportPanels, promptDialog } from './dialogs.js';
 
@@ -50,7 +50,7 @@ const resourceNames = (m) => [...new Set(arr(m?.resources).map((r) => (typeof r 
 
 function chips(item) {
   const m = item.manifest;
-  const out = [h('span', { class: 'chip host', title: item.url }, hostOf(item.url) || item.url)];
+  const out = [h('span', { class: 'chip host', title: maskUrl(item.url) || undefined }, hostOf(item.url) || 'URL non valido')];
   const types = arr(m?.types).map(str).filter(Boolean);
   const res = resourceNames(m);
   // Un chip per gruppo (non uno per valore): tiene le righe compatte.
@@ -60,7 +60,7 @@ function chips(item) {
 }
 
 /** Nome da mostrare: su Nuvio il nome può mancare (il fallback è l'URL): in quel caso l'host. */
-const displayName = (item) => (item.name === item.url ? hostOf(item.url) || item.url : item.name);
+const displayName = shownName;
 
 function badges(item) {
   const b = [];

@@ -4,7 +4,7 @@ import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 
-import { parseAddonUrl, toManifestUrl, idOf, baseUrl, extractUrls, pLimit, isHttpUrl, moveInArray } from '../js/util.js';
+import { parseAddonUrl, toManifestUrl, idOf, baseUrl, extractUrls, pLimit, isHttpUrl, moveInArray, maskUrl, shownName } from '../js/util.js';
 import { buildExport, parseImport } from '../js/backup.js';
 import { detectPlatform } from '../js/install.js';
 import { Panel, makeItem, planMirror, applyMirror, diffLists, rebaseOnRemote, mergeThreeWay } from '../js/model.js';
@@ -477,14 +477,76 @@ test('store: senza "Ricordami" il token va solo in sessionStorage; con, in local
     settings: {},
   });
   const local = localStorage.getItem('streamsync.v1');
-  assert.ok(!local.includes('TEMP'), 'token temporaneo finito in localStorage');
+  assert.ok(!local.includes('TEMP') && !local.includes('a@x'), 'account senza "Ricordami" finito in localStorage');
   assert.ok(local.includes('KEEP'));
   assert.ok(sessionStorage.getItem('streamsync.sessions.v1').includes('TEMP'));
   const loaded = store.loadStore();
+  assert.deepEqual(loaded.accounts.map((x) => x.id), ['a', 'b'], 'ordine conservato');
   assert.equal(loaded.accounts.find((x) => x.id === 'a').session.authKey, 'TEMP');
-  // chiusura della scheda = sessionStorage vuoto: l'account resta ma senza sessione
+  // chiusura della scheda = sessionStorage vuoto: dell'account senza "Ricordami" non resta nulla
   globalThis.sessionStorage = new MemStorage();
-  assert.equal(store.loadStore().accounts.find((x) => x.id === 'a').session, null);
+  assert.deepEqual(store.loadStore().accounts.map((x) => x.id), ['b']);
+});
+
+test('store: migrazione dal formato precedente (account senza "Ricordami" in localStorage, token in sessionStorage)', async () => {
+  globalThis.localStorage = new MemStorage();
+  globalThis.sessionStorage = new MemStorage();
+  localStorage.setItem('streamsync.v1', JSON.stringify({ accounts: [
+    { id: 'a', kind: 'stremio', label: 'A', email: 'a@x', remember: false, session: null },
+    { id: 'c', kind: 'nuvio', label: 'C', email: 'c@x', remember: false, session: null },
+  ], settings: {} }));
+  sessionStorage.setItem('streamsync.sessions.v1', JSON.stringify({ a: { authKey: 'TEMP' } }));
+  const store = await import('../js/store.js');
+  const loaded = store.loadStore();
+  assert.deepEqual(loaded.accounts.map((x) => [x.id, x.session?.authKey ?? null]), [['a', 'TEMP']], 'c (senza sessione) è solo una traccia da eliminare');
+  store.saveStore(loaded);
+  assert.ok(!localStorage.getItem('streamsync.v1').includes('@x'), 'le email non restano in localStorage dopo la migrazione');
+});
+
+test('store: un account rimosso (anche da un\'altra scheda) non viene ricaricato', async () => {
+  globalThis.localStorage = new MemStorage();
+  globalThis.sessionStorage = new MemStorage();
+  const store = await import('../js/store.js');
+  store.saveStore({ accounts: [{ id: 'b', kind: 'stremio', label: 'B', email: 'b@x', remember: true, session: { authKey: 'K' } }], settings: {}, removed: ['b'] });
+  assert.deepEqual(store.loadStore().accounts, []);
+  assert.deepEqual(store.readRemoved(), ['b']);
+});
+
+test('store: i backup automatici degli account senza "Ricordami" restano solo in sessionStorage', async () => {
+  globalThis.localStorage = new MemStorage();
+  globalThis.sessionStorage = new MemStorage();
+  const store = await import('../js/store.js');
+  store.pushBackup({ ts: 1, accountId: 'keep', items: [{ url: 'https://k.test/manifest.json' }] });
+  store.pushBackup({ ts: 2, accountId: 'temp', items: [{ url: 'https://t.test/SEGRETO/manifest.json' }] }, { persistent: false });
+  assert.ok(!localStorage.getItem('streamsync.backups.v1').includes('SEGRETO'));
+  assert.deepEqual(store.listBackups().map((b) => b.accountId), ['temp', 'keep'], 'più recente prima');
+  store.deleteBackupsFor('temp');
+  assert.deepEqual(store.listBackups().map((b) => b.accountId), ['keep']);
+  store.clearAll();
+  assert.deepEqual(store.listBackups(), []);
+});
+
+test('URL: nessun ReDoS su input costruiti ad arte (tempo lineare)', () => {
+  const t0 = performance.now();
+  extractUrls('https://a.test/' + '.'.repeat(200000) + 'x');
+  extractUrls('https://a.test/' + ')'.repeat(200000) + 'x');
+  idOf('https://a.test/' + '/'.repeat(16000) + 'x/manifest.json');
+  toManifestUrl('https://a.test/' + '/'.repeat(16000) + 'x');
+  assert.ok(performance.now() - t0 < 300, `troppo lento: ${Math.round(performance.now() - t0)} ms`);
+  assert.equal(parseAddonUrl('https://a.test/' + 'a'.repeat(20000)), null, 'URL oltre il limite');
+  assert.deepEqual(extractUrls('vedi https://a.test/x/manifest.json).'), ['https://a.test/x/manifest.json']);
+});
+
+test('maskUrl / shownName: chiavi nel percorso o nella query non vengono mai mostrate', () => {
+  assert.equal(maskUrl('https://torrentio.test/providers=yts|realdebrid=KEY/manifest.json'), 'https://torrentio.test/…/manifest.json');
+  assert.equal(maskUrl('https://a.test/manifest.json?token=KEY'), 'https://a.test/manifest.json?…');
+  assert.equal(maskUrl('https://user:pw@a.test/manifest.json'), 'https://a.test/manifest.json');
+  assert.equal(maskUrl('https://cinemeta.test/manifest.json'), 'https://cinemeta.test/manifest.json');
+  assert.equal(maskUrl('javascript:alert(1)'), '');
+  const url = 'https://a.test/KEY/manifest.json';
+  assert.equal(shownName({ url, name: url }), 'a.test');
+  assert.equal(shownName({ url, name: null }), 'a.test');
+  assert.equal(shownName({ url, name: 'Addon' }), 'Addon');
 });
 
 test('store: i backup di un account rimosso vengono cancellati', async () => {

@@ -718,7 +718,7 @@ await step('dentro un iframe altrui (clickjacking) non carica account né chiama
   await framer.close();
 });
 
-await step('"Ricordami" spento: token solo in sessionStorage, sopravvive al reload ma non a una nuova scheda', async () => {
+await step('"Ricordami" spento: account e token solo in sessionStorage, sopravvivono al reload ma non a una nuova scheda', async () => {
   const ctx = await newContext({ viewport: { width: 1300, height: 800 } });
   const tab = await ctx.newPage();
   tab.on('pageerror', (e) => errors.push(`pageerror(tab): ${e.message}`));
@@ -726,13 +726,144 @@ await step('"Ricordami" spento: token solo in sessionStorage, sopravvive al relo
   await addAccount('stremio', 's@x.it', 'pw', { remember: false, on: tab });
   await tab.locator('section.panel .row').first().waitFor();
   const local = await tab.evaluate(() => JSON.stringify({ ...localStorage }));
-  assert(!local.includes('SKEY'), 'token finito in localStorage');
+  assert(!local.includes('SKEY') && !local.includes('s@x.it'), 'token o email finiti in localStorage');
   await tab.reload();
   await tab.locator('section.panel .row').first().waitFor();
   const other = await ctx.newPage();
   await other.goto(APP);
-  await other.locator('.account-card button:has-text("Accedi")').waitFor();
+  await other.locator('.empty-state').waitFor(); // nessuna traccia dell'account nelle altre schede
   await ctx.close();
+});
+
+// ---------- attacchi simulati ----------
+const SECRET = 'realdebrid=SEGRETO123';
+const evilAddons = () => [
+  ...freshDb().stremio.addons,
+  { transportUrl: `https://evil.test/${SECRET}/manifest.json`, flags: {},
+    manifest: { id: 'evil', name: '<img src=x onerror="window.__pwned=1">', version: '"><svg onload="window.__pwned=1">',
+      description: '<script>window.__pwned=1</script>', types: ['<b onmouseover="window.__pwned=1">x</b>'], resources: ['stream'], catalogs: [],
+      logo: 'https://evil.test/pixel.png" onerror="window.__pwned=1', behaviorHints: { configurable: true } } },
+  { transportUrl: 'javascript:window.__pwned=1//https://x.test/manifest.json', flags: {},
+    manifest: { id: 'js', name: 'JS', resources: ['stream'], catalogs: [], logo: 'javascript:window.__pwned=1' } },
+];
+const attackCtx = async () => {
+  const ctx = await newContext({ viewport: { width: 1300, height: 800 } });
+  const hits = [];
+  await ctx.route(/https:\/\/evil\.test\/.*/, (r) => { hits.push(r.request().url()); return r.fulfill({ status: 404, headers: CORS, body: '' }); });
+  const tab = await ctx.newPage();
+  tab.on('pageerror', (e) => errors.push(`pageerror(attacco): ${e.message}`));
+  return { ctx, tab, hits };
+};
+
+await step('attacco: HTML/JS nei manifest, nei nomi dei profili, nei colori e negli URL non viene mai eseguito', async () => {
+  db = freshDb();
+  db.stremio.addons = evilAddons();
+  db.nuvio.profiles[0] = { ...db.nuvio.profiles[0], name: '<img src=x onerror="window.__pwned=1">', avatar_color_hex: 'red;background:url(https://evil.test/css)' };
+  db.nuvio.addons[1].push({ url: `https://evil.test/${SECRET}/manifest.json`, name: null, enabled: true, sort_order: 2 });
+  const { ctx, tab, hits } = await attackCtx();
+  try {
+    await tab.goto(APP);
+    await addAccount('stremio', 's@x.it', 'pw', { on: tab });
+    await tab.locator('section.panel .row').nth(4).waitFor();
+    await addAccount('nuvio', 'n@x.it', 'pw', { on: tab });
+    await tab.locator('section.panel[data-acc] .row').last().waitFor();
+    for (const r of await tab.locator('.row').all()) await r.hover(); // eventuali onmouseover
+    const evil = tab.locator('.row', { hasText: '<img src=x' }).first();
+    await evil.locator('button[aria-label="Altre azioni"]').click();
+    await tab.locator('.menu').waitFor();
+    await tab.keyboard.press('Escape');
+    const r = await tab.evaluate(() => ({
+      pwned: window.__pwned ?? null,
+      injected: document.querySelectorAll('img[src="x"], body script:not([src]), svg[onload], b[onmouseover]').length,
+      jsLinks: [...document.querySelectorAll('[href^="javascript" i], img[src^="javascript" i]')].length,
+    }));
+    eq(r, { pwned: null, injected: 0, jsLinks: 0 });
+    eq(hits.filter((u) => /css|pixel/.test(u)), [], 'richieste di tracciamento partite');
+  } finally { await ctx.close(); }
+});
+
+await step('attacco: il segreto nell\'URL di un addon non compare a schermo (tooltip, nomi, dialog)', async () => {
+  db = freshDb();
+  db.nuvio.addons[1].push({ url: `https://evil.test/${SECRET}/manifest.json`, name: null, enabled: true, sort_order: 2 });
+  const { ctx, tab } = await attackCtx();
+  try {
+    await tab.goto(APP);
+    await addAccount('nuvio', 'n@x.it', 'pw', { on: tab });
+    const main = tab.locator('section.panel[aria-label="Nuvio Main"]');
+    await main.locator('.row').nth(2).waitFor();
+    const visible = await tab.evaluate(() => [...document.querySelectorAll('[title], [aria-label]')].map((e) => `${e.title} ${e.getAttribute('aria-label')}`).join('\n') + document.body.innerText);
+    assert(!visible.includes('SEGRETO123'), 'chiave visibile a schermo o nei tooltip');
+    // Rimozione → dialog di conferma con l'elenco dei nomi
+    await main.locator('.row').nth(2).locator('input.sel').check();
+    await main.locator('button:has-text("Rimuovi")').first().click();
+    await main.locator('button:has-text("Salva")').click();
+    await tab.locator('dialog').waitFor();
+    assert(!(await tab.locator('dialog').innerText()).includes('SEGRETO123'), 'chiave visibile nel dialog di conferma');
+    await tab.locator('dialog button:has-text("Annulla")').click();
+  } finally { await ctx.close(); }
+});
+
+await step('attacco: "Esci da tutto" in una scheda non viene annullato da un\'altra scheda aperta', async () => {
+  db = freshDb();
+  const { ctx, tab: a } = await attackCtx();
+  try {
+    await a.goto(APP);
+    await addAccount('stremio', 's@x.it', 'pw', { on: a });
+    await a.locator('section.panel .row').first().waitFor();
+    const b = await ctx.newPage();
+    await b.goto(APP);
+    await b.locator('section.panel .row').first().waitFor();
+    await a.click('#backup');
+    await a.locator('dialog button:has-text("Esci da tutto")').click();
+    await a.locator('dialog button:has-text("Esci e cancella")').click();
+    await a.locator('.empty-state').waitFor();
+    // la scheda B fa qualcosa che salva lo stato (es. comprimere un pannello)
+    await b.waitForTimeout(300);
+    await b.locator('button[aria-label="Comprimi"]').first().click().catch(() => {});
+    await b.waitForTimeout(300);
+    const stored = await a.evaluate(() => JSON.stringify({ ...localStorage }));
+    assert(!/SKEY|s@x\.it/.test(stored), `la scheda B ha riscritto token/email: ${stored.slice(0, 200)}`);
+    assert(await b.locator('.empty-state').isVisible(), 'la scheda B mostra ancora l\'account');
+  } finally { await ctx.close(); }
+});
+
+await step('attacco: account rimosso in una scheda non viene "resuscitato" dall\'altra', async () => {
+  db = freshDb();
+  const { ctx, tab: a } = await attackCtx();
+  try {
+    await a.goto(APP);
+    await addAccount('stremio', 's@x.it', 'pw', { on: a });
+    await a.locator('section.panel .row').first().waitFor();
+    const b = await ctx.newPage();
+    await b.goto(APP);
+    await b.locator('section.panel .row').first().waitFor();
+    await a.evaluate(async () => { const app = await import('./js/app.js'); await app.removeAccount(app.state.accounts[0]); });
+    await b.waitForTimeout(300);
+    await b.locator('button[aria-label="Comprimi"]').first().click().catch(() => {});
+    await b.waitForTimeout(300);
+    const stored = await a.evaluate(() => localStorage.getItem('streamsync.v1') || '');
+    assert(!/SKEY|s@x\.it/.test(stored), `account resuscitato: ${stored.slice(0, 200)}`);
+  } finally { await ctx.close(); }
+});
+
+await step('attacco: con "Ricordami" spento non resta nulla nel browser dopo la chiusura (email, URL con chiavi nei backup)', async () => {
+  db = freshDb();
+  db.stremio.addons.push({ transportUrl: `https://addon-x.test/${SECRET}/manifest.json`, manifest: HOSTS['addon-x.test'], flags: {} });
+  const { ctx, tab } = await attackCtx();
+  try {
+    await tab.goto(APP);
+    await addAccount('stremio', 's@x.it', 'pw', { remember: false, on: tab });
+    const p = tab.locator('section.panel').first();
+    await row(p, 'Addon B').locator('button[aria-label="Sposta su"]').click();
+    await p.locator('button:has-text("Salva")').click();
+    await tab.locator('.toast', { hasText: 'Salvato' }).waitFor();
+    const local = await tab.evaluate(() => JSON.stringify({ ...localStorage }));
+    assert(!/SEGRETO123|s@x\.it|SKEY/.test(local), `dati persistenti con "Ricordami" spento: ${local.slice(0, 300)}`);
+    // nella stessa scheda il backup automatico resta disponibile
+    await tab.click('#backup');
+    await tab.locator('dialog .backup-list li').first().waitFor();
+    await tab.keyboard.press('Escape');
+  } finally { await ctx.close(); }
 });
 
 // ---------- telefono: contesto mobile con eventi touch reali ----------

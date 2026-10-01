@@ -8,8 +8,8 @@ import {
 } from './model.js';
 import { convertItem } from './convert.js';
 import { fetchManifest } from './manifest.js';
-import { loadStore, saveStore, pushBackup, readSession, deleteBackupsFor, clearAll, STORE_KEY } from './store.js';
-import { uid, pLimit, hashString, stableStringify, idOf, str, toManifestUrl, moveInArray } from './util.js';
+import { loadStore, saveStore, pushBackup, readSession, readRemoved, deleteBackupsFor, clearAll, STORE_KEY } from './store.js';
+import { uid, pLimit, hashString, stableStringify, idOf, str, toManifestUrl, moveInArray, shownName } from './util.js';
 
 export const state = {
   accounts: [],
@@ -55,9 +55,11 @@ const removedIds = new Set();
 
 function persist() {
   // Un'altra scheda può aver aggiunto account: si conservano invece di sovrascriverli.
+  // Quelli rimossi (qui o in un'altra scheda) non vanno mai riscritti.
+  const removed = new Set([...readRemoved(), ...removedIds]);
   const known = new Set(state.accounts.map((a) => a.id));
-  const foreign = loadStore().accounts.filter((a) => !known.has(a.id) && !removedIds.has(a.id));
-  saveStore({ accounts: [...state.accounts, ...foreign], settings: state.settings });
+  const foreign = loadStore().accounts.filter((a) => !known.has(a.id) && !removed.has(a.id));
+  saveStore({ accounts: [...state.accounts.filter((a) => !removed.has(a.id)), ...foreign], settings: state.settings, removed: [...removed] });
 }
 
 export function updateSettings(patch) {
@@ -71,9 +73,28 @@ export function toggleCollapsed(panelId) {
   persist();
 }
 
-/** Un'altra scheda ha ruotato il token Nuvio: lo si adotta subito, prima di riusare quello vecchio. */
+/**
+ * Modifiche fatte da un'altra scheda:
+ * - «Esci da tutto» (dati cancellati): anche questa scheda esce e cancella, invece di riscrivere token ed email;
+ * - account rimosso: sparisce anche qui;
+ * - token Nuvio ruotato: lo si adotta subito, prima di riusare quello vecchio.
+ */
 function onStorage(e) {
-  if (e.key !== STORE_KEY) return;
+  if (e.key !== STORE_KEY && e.key !== null) return; // null: localStorage.clear()
+  if (e.newValue == null) {
+    if (state.accounts.length) {
+      hooks.toast('Dati cancellati da un\'altra scheda: uscita da tutti gli account anche qui.', 'info');
+      forgetEverything();
+    }
+    return;
+  }
+  const removed = new Set(readRemoved());
+  const gone = state.accounts.filter((a) => removed.has(a.id));
+  if (gone.length) {
+    for (const acc of gone) { dropPanels(acc); removedIds.add(acc.id); }
+    state.accounts = state.accounts.filter((a) => !removed.has(a.id));
+    notifyBoard();
+  }
   for (const acc of state.accounts) {
     if (acc.kind !== 'nuvio' || !acc.nuvio) continue;
     const s = readSession(acc.id);
@@ -328,7 +349,7 @@ export async function savePanel(panel) {
       return true;
     }
 
-    pushBackup(backupEntry(panel, remote.items));
+    pushBackup(backupEntry(panel, remote.items), { persistent: !!acc.remember });
     try {
       await pushRemote(panel, toPush, remote.template);
     } catch (e) {
@@ -393,7 +414,7 @@ export async function copyItems(src, keys, dst, index, { move = false } = {}) {
     try { return { item, out: await convertItem(item, dst.kind) }; }
     catch (e) { return { item, error: explain(e) }; }
   })));
-  res.failed = converted.filter((c) => c.error).map((c) => ({ name: c.item.name, error: c.error }));
+  res.failed = converted.filter((c) => c.error).map((c) => ({ name: shownName(c.item), error: c.error }));
 
   // Durante la conversione (asincrona) la destinazione può essere cambiata.
   const ok = converted.filter((c) => c.out && !dst.has(c.out.url));
@@ -421,7 +442,7 @@ export async function mirrorInto(dst, src, mode) {
   const failed = [];
   await Promise.all(plan.add.map((item) => convertLimit(async () => {
     try { converted.set(idOf(item.url), await convertItem(item, dst.kind)); }
-    catch (e) { failed.push({ name: item.name, error: explain(e) }); }
+    catch (e) { failed.push({ name: shownName(item), error: explain(e) }); }
   })));
   const applied = dst.commit(applyMirror(dst.items, src.items, converted, mode));
   notifyPanel(dst);
