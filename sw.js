@@ -8,7 +8,7 @@
 //
 // L'elenco SHELL va tenuto allineato ai file dell'app: un test (tests/unit.test.mjs) lo verifica.
 
-const CACHE = 'addon-manager-v1';
+const CACHE = 'addon-manager-v2';
 const NETWORK_TIMEOUT_MS = 6000;
 
 const SHELL = [

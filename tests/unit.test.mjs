@@ -643,7 +643,7 @@ test('service worker: non salva risposte d\'errore né reindirizzate (Chrome le 
   const responses = [reply('non trovato', { status: 404 }), reply('reindirizzato', { redirected: true }), reply('opaca', { type: 'cors' })];
   const sw = loadSw(async () => responses.shift());
   for (const path of ['a.js', 'b.js', 'c.js']) await sw.dispatch(new Request('https://app.test/' + path));
-  const cache = sw.stores.get('addon-manager-v1');
+  const cache = sw.stores.get('addon-manager-v2');
   assert.equal(cache?.size ?? 0, 0, 'nessuna delle tre risposte doveva essere salvata');
 });
 
@@ -653,10 +653,10 @@ test('service worker: installa tutto l\'elenco e all\'attivazione elimina solo l
   let installed; sw.handlers.install({ waitUntil: (p) => { installed = p; } });
   await installed;
   assert.equal(fetched.length, SHELL.length);
-  assert.ok(sw.stores.get('addon-manager-v1').size === SHELL.length);
+  assert.ok(sw.stores.get('addon-manager-v2').size === SHELL.length);
   sw.stores.set('addon-manager-v0', new Map());
   sw.stores.set('altra-app', new Map());
   let activated; sw.handlers.activate({ waitUntil: (p) => { activated = p; } });
   await activated;
-  assert.deepEqual([...sw.stores.keys()].sort(), ['addon-manager-v1', 'altra-app']);
+  assert.deepEqual([...sw.stores.keys()].sort(), ['addon-manager-v2', 'altra-app']);
 });

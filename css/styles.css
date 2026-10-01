@@ -17,6 +17,8 @@
 
 * { box-sizing: border-box; }
 html, body { height: 100%; }
+/* Safari (iPhone) ingrandisce i testi lunghi quando si ruota in orizzontale: si disattiva */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body { margin: 0; font: 14px/1.45 var(--font); color: var(--text); background: var(--bg); display: flex; flex-direction: column; }
 button, input, select, textarea { font: inherit; color: inherit; }
 [hidden] { display: none !important; }
@@ -180,8 +182,8 @@ textarea { resize: vertical; font: 12.5px ui-monospace, monospace; }
 
 /* ---- mobile ---- */
 /* ---- schermi stretti (telefoni) ---- */
-/* Telefono in verticale, ma anche in orizzontale (schermo largo e basso con tocco): una colonna, scorre la pagina. */
-@media (max-width: 720px), (pointer: coarse) and (max-height: 520px) {
+/* Telefono in verticale, ma anche in orizzontale (schermo largo e basso): una colonna, scorre la pagina. */
+@media (max-width: 720px), (max-height: 520px) and (max-width: 1100px) {
   /* Un solo scroller: la pagina. Liste che scorrono dentro una pagina che scorre "rubano" il gesto:
      la pagina si muoveva solo toccando i pochi pixel fuori dalle liste. */
   html, body { height: auto; }
@@ -260,4 +262,4 @@ textarea { resize: vertical; font: 12.5px ui-monospace, monospace; }
 .install-text span { color: var(--muted); font-size: 12.5px; }
 .install-actions { display: flex; gap: 8px; margin-left: auto; }
 .steps { padding-left: 20px; display: grid; gap: 8px; margin: 10px 0 0; }
-@media (max-width: 720px), (pointer: coarse) and (max-height: 520px) { .install-banner { margin: 10px max(12px, var(--safe-right)) 0 max(12px, var(--safe-left)); } .install-actions { width: 100%; } .install-actions .btn { flex: 1; justify-content: center; } }
+@media (max-width: 720px), (max-height: 520px) and (max-width: 1100px) { .install-banner { margin: 10px max(12px, var(--safe-right)) 0 max(12px, var(--safe-left)); } .install-actions { width: 100%; } .install-actions .btn { flex: 1; justify-content: center; } }

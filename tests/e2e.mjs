@@ -889,6 +889,14 @@ await step('telefono in orizzontale: layout a colonna con scorrimento di pagina;
   }
 });
 
+await step('orizzontale basso senza tocco rilevato (es. Safari): stesso layout a colonna; testi non ingranditi', async () => {
+  await page.setViewportSize({ width: 956, height: 340 });
+  try {
+    const r = await page.evaluate(() => ({ dir: getComputedStyle(document.getElementById('board')).flexDirection, adj: getComputedStyle(document.documentElement).webkitTextSizeAdjust, sw: document.documentElement.scrollWidth, iw: innerWidth }));
+    eq(r.dir, 'column'); eq(r.adj, '100%'); eq(r.sw, r.iw);
+  } finally { await page.setViewportSize({ width: 1500, height: 900 }); await page.evaluate(() => window.scrollTo(0, 0)); }
+});
+
 await step('telefono: spazio tra le linguette e il primo pannello', async () => {
   await mpage.evaluate(() => window.scrollTo(0, 0));
   const chips = await mpage.locator('#accounts').boundingBox();
@@ -1002,7 +1010,7 @@ await step('installazione: service worker registrato, attivo e che controlla la 
   await ipage.evaluate(() => navigator.serviceWorker.ready);          // registrato e attivo (Trusted Types incluso)
   await ipage.reload();
   assert(await ipage.evaluate(() => !!navigator.serviceWorker.controller), 'il service worker non controlla la pagina');
-  const cache = await ipage.evaluate(async () => (await (await caches.open('addon-manager-v1')).keys()).map((r) => new URL(r.url).pathname));
+  const cache = await ipage.evaluate(async () => (await (await caches.open('addon-manager-v2')).keys()).map((r) => new URL(r.url).pathname));
   for (const f of ['/', '/js/main.js', '/js/ui/install-ui.js', '/css/styles.css', '/img/logo.svg', '/manifest.webmanifest']) assert(cache.includes(f), `non in cache: ${f}`);
   const cdp = await ictx.newCDPSession(ipage);
   eq((await cdp.send('Page.getAppManifest')).errors, []);
@@ -1025,7 +1033,7 @@ await step('installazione: il service worker non tocca le API: gli accessi passa
   await addAccount('stremio', 's@x.it', 'pw', { remember: false, on: ipage });
   await ipage.locator('section.panel .row').first().waitFor();
   assert(log.filter((l) => l.method === 'login' || l.method === 'addonCollectionGet').length >= before + 2, 'le richieste alle API non sono arrivate');
-  const apiCached = await ipage.evaluate(async () => (await (await caches.open('addon-manager-v1')).keys()).some((r) => !r.url.startsWith(location.origin)));
+  const apiCached = await ipage.evaluate(async () => (await (await caches.open('addon-manager-v2')).keys()).some((r) => !r.url.startsWith(location.origin)));
   assert(!apiCached, 'una risposta di un altro dominio è finita in cache');
 });
 
