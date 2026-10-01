@@ -68,6 +68,8 @@ Addon Manager si può installare: si apre in una finestra tutta sua, con la prop
 - **Safari su Mac:** File → «Aggiungi al Dock…» (Safari 17 o successivi).
 - **Altri browser:** se supportano le app web, cerca «Installa app» o «Aggiungi alla schermata Home» nel menu.
 
+Su telefono la barra con logo e pulsanti resta sempre fissa in alto, **sotto** la barra di stato (notch e Dynamic Island inclusi), e la lista finisce sopra l'indicatore Home: l'app usa le zone sicure del dispositivo (`viewport-fit=cover` + `env(safe-area-inset-*)`). Se hai già aggiunto l'app alla schermata Home, aggiornala (chiudila e riaprila un paio di volte) o rimuovila e aggiungila di nuovo per vedere la modifica.
+
 Con «Ricordami» spento la sessione dura finché l'app resta aperta: su un dispositivo personale conviene attivarlo. Gli aggiornamenti arrivano da soli: quando sei in linea l'app carica sempre i file più recenti.
 
 ### Scorciatoie da tastiera (computer)

@@ -390,10 +390,13 @@ await step('finestra stretta: trascinando vicino al bordo inferiore scorre la PA
   // 30px dal bordo: lo scorrimento nativo di Chromium parte solo negli ultimi ~8px, quindi scorre solo grazie all'app
   await page.mouse.move(200, 670, { steps: 10 });
   await page.waitForFunction(() => document.querySelector('section[aria-label="Nuvio Kids"] .plist').getBoundingClientRect().top < 450, null, { timeout: 15000 });
-  await page.mouse.move(200, 500, { steps: 4 });
+  await page.mouse.move(200, 330, { steps: 4 }); // fuori dalle zone di bordo lo scorrimento si ferma
+  await page.waitForTimeout(400);
+  const over = await kids.locator('.plist').boundingBox(); // il punto di rilascio segue il pannello, non una coordinata fissa
+  await page.mouse.move(200, over.y + over.height / 2, { steps: 4 });
   await page.waitForTimeout(250);
   await page.mouse.up();
-  await row(kids, 'Addon B').waitFor();
+  await row(kids, 'Addon B').waitFor({ timeout: 5000 });
   await kids.locator('button:has-text("Annulla")').first().click();
   await page.setViewportSize({ width: 1500, height: 900 });
   await page.evaluate(() => { window.scrollTo(0, 0); document.getElementById('board').scrollLeft = 0; });
@@ -802,13 +805,57 @@ await step('telefono: uno swipe SOPRA la lista scorre la pagina, anche senza asp
   await settle();
 });
 
-await step('telefono: l\'intestazione del pannello resta agganciata in alto mentre si scorre', async () => {
+await step('telefono: l\'intestazione del pannello resta agganciata in alto, sotto la barra, mentre si scorre', async () => {
   await mpage.evaluate(() => window.scrollTo(0, 900));
   const r = await mpage.evaluate(() => {
     const el = document.querySelector('section[aria-label^="Stremio"] .pstick');
-    return { top: Math.round(el.getBoundingClientRect().top), position: getComputedStyle(el).position };
+    const bar = document.querySelector('.topbar-main').getBoundingClientRect();
+    return { top: Math.round(el.getBoundingClientRect().top), bar: Math.round(bar.bottom), position: getComputedStyle(el).position };
   });
-  eq(r, { top: 0, position: 'sticky' });
+  eq(r, { top: 54, bar: 54, position: 'sticky' });
+});
+
+await step('telefono: la barra con logo e azioni resta fissa in alto mentre si scorre (non scompare, non si sovrappone)', async () => {
+  for (const y of [0, 400, 900, 5000]) {
+    await mpage.evaluate((v) => window.scrollTo(0, v), y);
+    const r = await mpage.evaluate(() => {
+      const bar = document.querySelector('.topbar-main').getBoundingClientRect();
+      const btn = document.getElementById('add-account').getBoundingClientRect();
+      const hit = document.elementFromPoint(btn.x + btn.width / 2, btn.y + btn.height / 2);
+      return { top: Math.round(bar.top), visible: !!hit?.closest('#add-account'), position: getComputedStyle(document.querySelector('.topbar-main')).position };
+    });
+    eq(r, { top: 0, visible: true, position: 'sticky' });
+  }
+  await mpage.evaluate(() => window.scrollTo(0, 0));
+});
+
+await step('telefono: viewport-fit=cover e schermata iniziale senza scorrimento inutile', async () => {
+  assert(/viewport-fit=cover/.test(await mpage.locator('meta[name=viewport]').getAttribute('content')), 'serve viewport-fit=cover per usare le zone sicure');
+});
+
+await step('telefono: con notch/barra di stato (zone sicure) la barra resta sotto la barra di stato e la lista sopra l\'indicatore Home', async () => {
+  await mcdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 59, bottom: 34, left: 0, right: 0 } });
+  try {
+    for (const y of [0, 900]) {
+      await mpage.evaluate((v) => window.scrollTo(0, v), y);
+      const r = await mpage.evaluate((scrolled) => {
+        const bar = document.querySelector('.topbar-main').getBoundingClientRect();
+        const btn = document.getElementById('add-account').getBoundingClientRect();
+        const brand = document.querySelector('.brand').getBoundingClientRect();
+        const stick = document.querySelector('section[aria-label^="Stremio"] .pstick').getBoundingClientRect();
+        return { barTop: Math.round(bar.top), barH: Math.round(bar.height), btnTop: Math.round(btn.top), brandTop: Math.round(brand.top), stickTop: scrolled ? Math.round(stick.top) : null };
+      }, y);
+      eq(r.barTop, 0); eq(r.barH, 113);
+      assert(r.btnTop >= 59 && r.brandTop >= 59, `i pulsanti sono sotto la barra di stato: ${JSON.stringify(r)}`);
+      if (y) eq(r.stickTop, 113);
+    }
+    await mpage.evaluate(() => window.scrollTo(0, 1e6));
+    const bottom = await mpage.evaluate(() => parseFloat(getComputedStyle(document.getElementById('board')).paddingBottom));
+    assert(bottom >= 28 + 34, `margine inferiore insufficiente: ${bottom}`);
+  } finally {
+    await mcdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 0, bottom: 0, left: 0, right: 0 } });
+    await mpage.evaluate(() => window.scrollTo(0, 0));
+  }
 });
 
 await step('telefono: spazio tra le linguette e il primo pannello', async () => {
@@ -886,6 +933,24 @@ await step('telefono: barra di selezione su una riga con le parole brevi; "Salva
   const text = await mpage.locator('#save-all').textContent();
   assert(!/null/.test(text) && /Salva tutto \(\d\)/.test(text), `testo del pulsante: ${JSON.stringify(text)}`);
   await mctx.close();
+});
+
+await step('iPhone: la schermata iniziale (nessun account) non scorre e la barra sta sotto la barra di stato', async () => {
+  db = freshDb();
+  const c = await newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const pg = await c.newPage();
+  try {
+    await pg.goto(APP);
+    await pg.locator('.empty-state').waitFor();
+    const cdp = await c.newCDPSession(pg);
+    await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 59, bottom: 34, left: 0, right: 0 } });
+    const r = await pg.evaluate(() => ({
+      overflow: document.scrollingElement.scrollHeight - innerHeight,
+      btnTop: Math.round(document.getElementById('add-account').getBoundingClientRect().top),
+    }));
+    assert(r.overflow <= 0, `la pagina iniziale scorre di ${r.overflow}px`);
+    assert(r.btnTop >= 59, `i pulsanti finiscono sotto la barra di stato: ${r.btnTop}`);
+  } finally { await c.close(); }
 });
 
 // ---------- installazione come app ----------
