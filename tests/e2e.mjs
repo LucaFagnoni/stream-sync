@@ -858,6 +858,37 @@ await step('telefono: con notch/barra di stato (zone sicure) la barra resta sott
   }
 });
 
+await step('telefono in orizzontale: layout a colonna con scorrimento di pagina; con notch ai lati nulla sfora né finisce sotto il notch', async () => {
+  const insets = { top: 0, bottom: 21, left: 59, right: 59 };
+  await mpage.setViewportSize({ width: 844, height: 390 });
+  await mcdp.send('Emulation.setSafeAreaInsetsOverride', { insets });
+  try {
+    const measure = () => mpage.evaluate(() => {
+      const L = (sel) => document.querySelector(sel).getBoundingClientRect();
+      const all = [...document.querySelectorAll('.topbar-main > *, .top-actions > *, #search, .chip-wrap, section.panel')].map((e) => e.getBoundingClientRect());
+      return {
+        scrollW: document.documentElement.scrollWidth, innerW: innerWidth,
+        left: Math.round(Math.min(...all.map((r) => r.left))), right: Math.round(Math.max(...all.map((r) => r.right))),
+        boardDir: getComputedStyle(document.getElementById('board')).flexDirection, barPos: getComputedStyle(document.querySelector('.topbar-main')).position,
+        listOverflow: getComputedStyle(document.querySelector('.plist')).overflowY,
+        brandLeft: Math.round(L('.brand').left), addRight: Math.round(L('#add-account').right),
+      };
+    });
+    const r = await measure();
+    eq(r.boardDir, 'column'); eq(r.barPos, 'sticky'); eq(r.listOverflow, 'visible'); eq(r.scrollW, r.innerW);
+    assert(r.left >= 59 && r.right <= 844 - 59, `fuori dalle zone sicure: ${JSON.stringify(r)}`);
+    // tablet/computer largo con un notch ai lati (layout a colonne): stessi margini
+    await mpage.setViewportSize({ width: 1000, height: 700 });
+    const d = await measure();
+    eq(d.boardDir, 'row'); eq(d.scrollW, d.innerW);
+    assert(d.left >= 59 && d.brandLeft >= 59 && d.addRight <= 1000 - 59, `layout largo fuori dalle zone sicure: ${JSON.stringify(d)}`);
+  } finally {
+    await mcdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 0, bottom: 0, left: 0, right: 0 } });
+    await mpage.setViewportSize({ width: 390, height: 844 });
+    await mpage.evaluate(() => window.scrollTo(0, 0));
+  }
+});
+
 await step('telefono: spazio tra le linguette e il primo pannello', async () => {
   await mpage.evaluate(() => window.scrollTo(0, 0));
   const chips = await mpage.locator('#accounts').boundingBox();

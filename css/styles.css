@@ -26,7 +26,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .icon { flex: none; }
 
 /* ---- topbar ---- */
-.topbar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
+.topbar { display: flex; align-items: center; gap: 12px; padding: max(10px, var(--safe-top)) max(16px, var(--safe-right)) 10px max(16px, var(--safe-left)); background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
 .topbar-main { display: contents; }
 .brand { order: 0; display: flex; align-items: center; gap: 8px; font-size: 16px; }
 .logo-mark { width: 30px; height: 30px; display: block; flex: none; }
@@ -52,7 +52,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .icon-btn:disabled { opacity: .3; cursor: default; }
 
 /* ---- account strip ---- */
-.accounts { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px 4px; }
+.accounts { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px max(16px, var(--safe-right)) 4px max(16px, var(--safe-left)); }
 .accounts:empty { display: none; }
 .chip-wrap { display: inline-flex; position: relative; border-radius: 999px; }
 .chip-wrap[draggable="true"] .chip-acc { cursor: grab; }
@@ -74,7 +74,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .kind-card-title { display: flex; align-items: center; gap: 8px; }
 
 /* ---- board ---- */
-.board { flex: 1; min-height: 0; display: flex; gap: 14px; padding: 22px 16px 24px; overflow-x: auto; align-items: stretch; }
+.board { flex: 1; min-height: 0; display: flex; gap: 14px; padding: 22px max(16px, var(--safe-right)) calc(24px + var(--safe-bottom)) max(16px, var(--safe-left)); overflow-x: auto; align-items: stretch; }
 .board.is-empty { align-items: center; justify-content: center; }
 .panel { flex: 0 0 min(430px, 92vw); display: flex; flex-direction: column; min-height: 0; background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--accent, var(--primary)); border-radius: var(--radius); box-shadow: var(--shadow); position: relative; }
 .panel.account-card { align-self: flex-start; }
@@ -180,7 +180,8 @@ textarea { resize: vertical; font: 12.5px ui-monospace, monospace; }
 
 /* ---- mobile ---- */
 /* ---- schermi stretti (telefoni) ---- */
-@media (max-width: 720px) {
+/* Telefono in verticale, ma anche in orizzontale (schermo largo e basso con tocco): una colonna, scorre la pagina. */
+@media (max-width: 720px), (pointer: coarse) and (max-height: 520px) {
   /* Un solo scroller: la pagina. Liste che scorrono dentro una pagina che scorre "rubano" il gesto:
      la pagina si muoveva solo toccando i pochi pixel fuori dalle liste. */
   html, body { height: auto; }
@@ -205,6 +206,7 @@ textarea { resize: vertical; font: 12.5px ui-monospace, monospace; }
   .panel { flex: none; width: 100%; border-top: 1px solid var(--border); }
   .panel.collapsed { flex-basis: auto; }
   /* Intestazione, riepilogo modifiche e azioni di selezione restano visibili mentre si scorre il pannello. */
+  .topbar-main, .pstick { -webkit-transform: translateZ(0); transform: translateZ(0); }
   .pstick { position: sticky; top: calc(var(--bar-h) + var(--safe-top)); z-index: 6; background: var(--surface); border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
     box-shadow: inset 0 3px 0 var(--accent, var(--primary)), 0 6px 8px -8px rgba(16, 24, 40, .35); }
   .phead { padding-top: 13px; }
@@ -251,11 +253,11 @@ textarea { resize: vertical; font: 12.5px ui-monospace, monospace; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
 
 /* ---- invito all'installazione ---- */
-.install-banner { margin: 10px 16px 0; padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border)); border-radius: var(--radius); background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
+.install-banner { margin: 10px max(16px, var(--safe-right)) 0 max(16px, var(--safe-left)); padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border)); border-radius: var(--radius); background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
 .install-inner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .install-logo { border-radius: 8px; flex: none; }
 .install-text { flex: 1 1 220px; display: flex; flex-direction: column; min-width: 0; }
 .install-text span { color: var(--muted); font-size: 12.5px; }
 .install-actions { display: flex; gap: 8px; margin-left: auto; }
 .steps { padding-left: 20px; display: grid; gap: 8px; margin: 10px 0 0; }
-@media (max-width: 720px) { .install-banner { margin: 10px max(12px, var(--safe-right)) 0 max(12px, var(--safe-left)); } .install-actions { width: 100%; } .install-actions .btn { flex: 1; justify-content: center; } }
+@media (max-width: 720px), (pointer: coarse) and (max-height: 520px) { .install-banner { margin: 10px max(12px, var(--safe-right)) 0 max(12px, var(--safe-left)); } .install-actions { width: 100%; } .install-actions .btn { flex: 1; justify-content: center; } }
