@@ -47,7 +47,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .icon-btn:disabled { opacity: .3; cursor: default; }
 
 /* ---- account strip ---- */
-.accounts { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px 0; }
+.accounts { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px 4px; }
 .accounts:empty { display: none; }
 .chip-acc { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px 4px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); cursor: pointer; }
 .chip-acc:hover { border-color: var(--border-strong); }
@@ -61,7 +61,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .kind-card-title { display: flex; align-items: center; gap: 8px; }
 
 /* ---- board ---- */
-.board { flex: 1; min-height: 0; display: flex; gap: 14px; padding: 14px 16px 18px; overflow-x: auto; align-items: stretch; }
+.board { flex: 1; min-height: 0; display: flex; gap: 14px; padding: 22px 16px 24px; overflow-x: auto; align-items: stretch; }
 .board.is-empty { align-items: center; justify-content: center; }
 .panel { flex: 0 0 min(430px, 92vw); display: flex; flex-direction: column; min-height: 0; background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--accent, var(--primary)); border-radius: var(--radius); box-shadow: var(--shadow); position: relative; }
 .panel.account-card { align-self: flex-start; }
@@ -69,6 +69,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .panel.dirty { border-color: color-mix(in srgb, var(--warn) 55%, var(--border)); border-top-color: var(--accent, var(--primary)); }
 .panel.saving::after { content: ""; position: absolute; inset: 0; background: color-mix(in srgb, var(--surface) 55%, transparent); border-radius: inherit; cursor: progress; }
 .panel.drop-target { outline: 2px dashed var(--primary); outline-offset: -2px; }
+.pstick { flex: none; }
+.touch-only, .selicon, .count-badge, .lbl-s { display: none; }
 .phead { display: flex; align-items: center; gap: 10px; padding: 10px 10px 8px 12px; }
 .ptitle { flex: 1; min-width: 0; display: flex; flex-direction: column; } .ptitle strong, .ptitle small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ptitle small { color: var(--muted); font-size: 12px; }
 .pbtns { display: flex; }
@@ -106,7 +108,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .badge.lock { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
 .ractions { position: absolute; top: 6px; right: 6px; display: flex; align-items: center; padding: 2px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); opacity: 0; }
 .row:hover .ractions, .row:focus-within .ractions, .row:focus .ractions { opacity: 1; }
-@media (hover: none) { .ractions { position: static; opacity: 1; pointer-events: auto; background: none; border: 0; box-shadow: none; padding: 0; flex: none; } }
 .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; } .dot.ok { background: var(--ok); } .dot.fail { background: var(--danger); } .dot.checking { background: var(--warn); animation: pulse 1s infinite; }
 .drop-line { position: absolute; left: 6px; right: 6px; height: 3px; border-radius: 2px; background: var(--primary); pointer-events: none; z-index: 2; }
 .note { display: flex; align-items: center; gap: 8px; padding: 14px; color: var(--muted); }
@@ -165,10 +166,65 @@ textarea { resize: vertical; font: 12.5px ui-monospace, monospace; }
 .mirror-preview { padding: 10px 12px; background: var(--surface-2); border-radius: 10px; font-size: 13px; } .mirror-preview p { margin: 4px 0; overflow-wrap: anywhere; }
 
 /* ---- mobile ---- */
+/* ---- schermi stretti (telefoni) ---- */
 @media (max-width: 720px) {
-  .topbar { flex-wrap: wrap; } .search { order: 3; flex-basis: 100%; max-width: none; } .brand strong { display: none; }
-  .board { flex-direction: column; overflow-x: hidden; overflow-y: auto; } .panel { flex: none; width: 100%; } .plist { max-height: 65vh; }
-  .ractions { position: static; opacity: 1; pointer-events: auto; background: none; border: 0; box-shadow: none; padding: 0; flex: none; } .grip { display: none; }
-  .top-actions { flex-wrap: wrap; gap: 6px; } .top-actions .btn { padding: 6px 10px; }
+  /* Un solo scroller: la pagina. Liste che scorrono dentro una pagina che scorre "rubano" il gesto:
+     la pagina si muoveva solo toccando i pochi pixel fuori dalle liste. */
+  html, body { height: auto; }
+  body { display: block; min-height: 100vh; min-height: 100dvh; }
+  .topbar { position: static; flex-wrap: wrap; row-gap: 8px; padding: 10px 12px; }
+  .search { order: 3; flex: 1 0 100%; max-width: none; }
+  .top-actions { margin-left: auto; gap: 4px; flex-wrap: nowrap; }
+  .top-actions .btn { padding: 0 11px; min-height: 38px; }
+  .top-actions .lbl { display: none; }
+  .count-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #fff; color: var(--primary); font-size: 11px; font-weight: 700; }
+  .accounts { padding: 12px 12px 2px; }
+  .board { display: flex; flex-direction: column; flex: none; overflow: visible; padding: 20px 12px 28px; gap: 16px; }
+  .board.is-empty { min-height: 60vh; }
+  .panel { flex: none; width: 100%; border-top: 1px solid var(--border); }
+  .panel.collapsed { flex-basis: auto; }
+  /* Intestazione, riepilogo modifiche e azioni di selezione restano visibili mentre si scorre il pannello. */
+  .pstick { position: sticky; top: 0; z-index: 6; background: var(--surface); border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
+    box-shadow: inset 0 3px 0 var(--accent, var(--primary)), 0 6px 8px -8px rgba(16, 24, 40, .35); }
+  .phead { padding-top: 13px; }
+  .plist { flex: none; min-height: 0; max-height: none; overflow: visible; }
+  .plist.empty { padding: 20px 16px; }
+  .row { scroll-margin-top: 170px; }
+  .grip { display: none; }
+  /* Tipi e risorse (movie · series, catalog · stream) a capo uno per riga allungano molto ogni addon:
+     sui telefoni resta l'host; il resto è nel manifest. */
+  .chip.type, .chip.res { display: none; }
+  .dialog { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
+  .dialog-body { max-height: calc(100vh - 26px); max-height: calc(100dvh - 26px); }
 }
+
+/* ---- dispositivi touch (puntatore "grossolano", senza hover) ---- */
+@media (hover: none) and (pointer: coarse) {
+  .pc-only { display: none; }
+  .touch-only { display: inline; }
+  .selicon { display: inline-flex; margin-right: 4px; vertical-align: middle; }
+  button, .row { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .row { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  /* Bersagli di tocco da almeno ~40px */
+  .icon-btn { width: 40px; height: 40px; }
+  .btn { min-height: 40px; }
+  .btn.small { min-height: 38px; padding: 6px 12px; }
+  .menu-item { padding: 12px; }
+  .row .sel { width: 22px; height: 22px; margin-top: 9px; }
+  /* Sotto i 16px iOS ingrandisce la pagina quando si tocca un campo */
+  input[type=text], input[type=email], input[type=password], input[type=search], select, textarea { font-size: 16px; }
+  /* Azioni di riga sempre visibili, in griglia 2×2 (copia/altro sopra, su/giù sotto) */
+  .ractions { position: static; opacity: 1; background: none; border: 0; box-shadow: none; padding: 0; flex: none;
+    display: grid; grid-template-columns: repeat(2, 38px); align-self: flex-start; }
+  .ractions .icon-btn { width: 38px; height: 38px; }
+  /* Annulla/Ripeti disattivati occupano 80px che servono al titolo del pannello */
+  .phead .icon-btn:disabled[aria-label="Annulla"], .phead .icon-btn:disabled[aria-label="Ripeti"] { display: none; }
+  [data-act="copy"] { order: 1; } [data-act="more"] { order: 2; } [data-act="up"] { order: 3; } [data-act="down"] { order: 4; }
+  /* Barra della selezione: solo icone, una riga */
+  .selbar .lbl, .selcount .lbl { display: none; }
+  .selbar .lbl-s { display: inline; }
+  .selbar .btn { padding: 0 10px; }
+  .selbar .btn.small { min-width: 40px; justify-content: center; }
+}
+
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }

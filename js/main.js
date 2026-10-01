@@ -36,6 +36,16 @@ app.on('board', renderBoard);
 app.on('panel', renderPanel);
 app.on('accounts', updateSaveAll);
 
+// Sui telefoni i pulsanti della barra mostrano solo l'icona (il testo .lbl si nasconde via CSS).
+$('backup').replaceChildren(icon('download', 16), h('span', { class: 'lbl' }, 'Backup'));
+$('add-account').replaceChildren(icon('plus', 16), h('span', { class: 'lbl' }, 'Account'));
+
+// Il suggerimento "( / )" ha senso solo dove c'è una tastiera.
+const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
+const setPlaceholder = () => { $('search').placeholder = finePointer.matches ? 'Cerca in tutte le liste  ( / )' : 'Cerca in tutte le liste'; };
+setPlaceholder();
+finePointer.addEventListener('change', setPlaceholder);
+
 $('add-account').addEventListener('click', () => openLogin());
 $('backup').addEventListener('click', () => openBackups());
 $('save-all').addEventListener('click', async () => {

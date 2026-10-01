@@ -31,10 +31,10 @@ StreamSync è un'applicazione web statica, senza backend: il browser comunica di
 - Account Nuvio con profili: una colonna per profilo (fino a 6). I profili che usano gli addon del Profilo 1 sono in sola lettura.
 
 **Organizzazione degli addon**
-- **Trascina e rilascia** per riordinare una lista o per **copiare** addon in un altro account. Con <kbd>Maiusc</kbd> al rilascio l'addon viene **spostato**.
+- **Trascina e rilascia** (da computer) per riordinare una lista o per **copiare** addon in un altro account; tieni premuto <kbd>Maiusc</kbd> mentre rilasci per **spostarli**.
 - Scorrimento automatico vicino ai bordi, per raggiungere colonne fuori schermo durante il trascinamento.
 - Selezione multipla (con <kbd>Maiusc</kbd>+clic per un intervallo) e azioni di gruppo: copia, sposta, rimuovi, attiva/disattiva (Nuvio).
-- Alternative ai gesti, anche da touch: menu «Copia in…» / «Sposta in…» e riordino da tastiera.
+- Da smartphone e tablet: menu ⋯ → «Copia in…» / «Sposta in…» e frecce ↑ ↓ per riordinare ([vedi sotto](#da-smartphone-e-tablet)). I testi dell'interfaccia si adattano al dispositivo: istruzioni per mouse e tastiera su computer, per il tocco su telefono.
 - Ricerca istantanea su tutte le liste e ordinamento alfabetico.
 
 **Manifest e manutenzione**
@@ -47,16 +47,16 @@ StreamSync è un'applicazione web statica, senza backend: il browser comunica di
 - Ogni modifica resta una **bozza locale**, con annulla/ripeti, finché non premi «Salva». Un riepilogo (`+2 −1 ~1 ↕`) mostra cosa cambierà.
 - **Sincronizza da…**: copia in una lista gli addon mancanti di un'altra, oppure rendila identica alla sorgente, con anteprima.
 - Importazione ed esportazione in JSON; backup automatico dello stato remoto prima di ogni salvataggio.
-- Tema chiaro e scuro, interfaccia utilizzabile anche da smartphone.
+- Tema chiaro e scuro; interfaccia pensata anche per lo smartphone.
 
 ## Guida rapida
 
 1. Apri [addonmanager.pages.dev](https://addonmanager.pages.dev/) e premi **+ Account**.
 2. Scegli Stremio o Nuvio e accedi con email e password. Attiva «Ricordami» solo su un dispositivo personale.
-3. Organizza gli addon: trascinali, riordinali, aggiungili da URL. Finché non salvi, nulla cambia sui server.
+3. Organizza gli addon: copiali tra gli account, riordinali, aggiungili da URL. Finché non salvi, nulla cambia sui server.
 4. Premi **Salva** sulla colonna (o **Salva tutto**). Se rimuovi addon, ti viene chiesta una conferma con l'elenco.
 
-### Scorciatoie da tastiera
+### Scorciatoie da tastiera (computer)
 
 | Tasti | Azione |
 |---|---|
@@ -68,6 +68,17 @@ StreamSync è un'applicazione web statica, senza backend: il browser comunica di
 | <kbd>Alt</kbd> + <kbd>↑</kbd> / <kbd>↓</kbd> | Sposta in su / in giù l'addon con il focus |
 | <kbd>Spazio</kbd> | Seleziona / deseleziona |
 | <kbd>Canc</kbd> | Rimuovi (dalla bozza) |
+
+### Da smartphone e tablet
+
+Sugli schermi stretti i pannelli sono uno sotto l'altro e **scorre solo la pagina**: puoi far scorrere il dito ovunque, anche sopra una lista, senza che la lista "catturi" il gesto. L'intestazione di ogni pannello (nome, riepilogo delle modifiche, «Salva», azioni sulla selezione) resta agganciata in alto mentre scorri i suoi addon.
+
+- **Copiare o spostare:** tocca ⋯ accanto all'addon → «Copia in…» o «Sposta in…» → scegli l'account o il profilo.
+- **Più addon insieme:** spunta le caselle, poi usa «Copia» / «Sposta» nella barra che compare in alto.
+- **Riordinare:** frecce ↑ ↓ accanto a ogni addon.
+- **Ripiegare una lista:** la freccia in alto a destra del pannello.
+
+Il trascinamento con il dito non è previsto: su touch si usa il menu ⋯.
 
 ## Sicurezza e privacy
 

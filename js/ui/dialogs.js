@@ -1,4 +1,4 @@
-import { h, icon, dialog, dialogHeader, confirmDialog, toast, downloadFile, kindLogo } from './dom.js';
+import { h, icon, dialog, dialogHeader, confirmDialog, toast, downloadFile, kindLogo, fill } from './dom.js';
 import * as app from '../app.js';
 import { planMirror } from '../model.js';
 import { buildExport, parseImport } from '../backup.js';
@@ -197,7 +197,7 @@ export function openMirror(dst) {
     const render = () => {
       const plan = planMirror(dst.items, src().items, mode);
       const names = (list) => list.slice(0, 6).map((i) => i.name).join(', ') + (list.length > 6 ? `, … (+${list.length - 6})` : '');
-      preview.replaceChildren(
+      fill(preview,
         h('p', null, h('strong', null, `${plan.add.length}`), ' da aggiungere', plan.add.length ? `: ${names(plan.add)}` : ''),
         mode === 'mirror' ? h('p', { class: plan.remove.length ? 'warn-text' : '' }, h('strong', null, `${plan.remove.length}`), ' da rimuovere', plan.remove.length ? `: ${names(plan.remove)}` : '') : null,
         mode === 'mirror' ? h('p', { class: 'field-hint' }, 'L\'ordine diventerà quello della sorgente. Gli addon protetti restano.') : null);

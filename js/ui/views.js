@@ -1,4 +1,4 @@
-import { h, icon, iconButton, menu, toast, copyText, confirmDialog, kindLogo } from './dom.js';
+import { h, icon, iconButton, menu, toast, copyText, confirmDialog, kindLogo, fill } from './dom.js';
 import * as app from '../app.js';
 import { isProtected } from '../model.js';
 import { baseUrl, hostOf, str, arr, isHttpUrl, extractUrls } from '../util.js';
@@ -22,6 +22,11 @@ export const setFilter = (t) => {
 };
 
 const httpUrl = isHttpUrl;
+
+// Testi diversi per chi usa mouse/tastiera e per chi usa il touch: il CSS ne mostra uno solo
+// (@media (hover: none) and (pointer: coarse)), così non ci sono istruzioni impossibili da eseguire.
+const pc = (...c) => h('span', { class: 'pc-only' }, ...c);
+const touch = (...c) => h('span', { class: 'touch-only' }, ...c);
 const safeColor = (c) => (/^#[0-9a-f]{3,8}$/i.test(c || '') ? c : '#64748b');
 const matches = (i) => !filterText ||
   `${i.name} ${i.url} ${str(i.manifest?.description)}`.toLowerCase().includes(filterText);
@@ -94,10 +99,10 @@ function buildRow(panel, item, index) {
     description ? h('div', { class: 'desc' }, description) : null,
     h('div', { class: 'chips' }, ...chips(item))),
   h('div', { class: 'ractions' },
-    iconButton('copy', 'Copia URL del manifest', () => copyUrl(item.url)),
-    iconButton('up', 'Sposta su', () => moveBy(panel, item, -1), { disabled: index === 0 || undefined }),
-    iconButton('down', 'Sposta giù', () => moveBy(panel, item, 1), { disabled: index === panel.items.length - 1 || undefined }),
-    iconButton('more', 'Altre azioni', (e) => itemMenu(e.currentTarget, panel, item))));
+    iconButton('copy', 'Copia URL del manifest', () => copyUrl(item.url), { dataset: { act: 'copy' } }),
+    iconButton('up', 'Sposta su', () => moveBy(panel, item, -1), { disabled: index === 0 || undefined, dataset: { act: 'up' } }),
+    iconButton('down', 'Sposta giù', () => moveBy(panel, item, 1), { disabled: index === panel.items.length - 1 || undefined, dataset: { act: 'down' } }),
+    iconButton('more', 'Altre azioni', (e) => itemMenu(e.currentTarget, panel, item), { dataset: { act: 'more' } })));
   row.hidden = !matches(item);
   return row;
 }
@@ -224,9 +229,10 @@ function onDragStart(e, panel, item, row) {
 // ---------- scorrimento automatico durante il trascinamento ----------
 // Il browser non fa scorrere da solo la board orizzontale (né le liste) mentre si trascina:
 // avvicinandosi a un bordo si scorre, così si raggiungono i pannelli fuori schermo.
+// Verticalmente può scorrere la lista sotto il puntatore, la board o (layout stretto) la pagina intera.
 const EDGE = 90;
 const MAX_SPEED = 26;
-let scroll = { dx: 0, dy: 0, list: null };
+let scroll = { dx: 0, dy: 0, scroller: null };
 let scrollRaf = 0;
 
 const edgeSpeed = (pos, start, end) => {
@@ -236,15 +242,20 @@ const edgeSpeed = (pos, start, end) => {
   return 0;
 };
 
+const canScrollY = (el) => el.scrollHeight > el.clientHeight + 1;
+
 function scrollTick() {
   if (!drag || (!scroll.dx && !scroll.dy)) { scrollRaf = 0; return; }
   if (scroll.dx) board.scrollLeft += scroll.dx;
-  if (scroll.dy) (scroll.list || board).scrollTop += scroll.dy;
+  if (scroll.dy) {
+    if (scroll.scroller === document.scrollingElement) window.scrollBy(0, scroll.dy);
+    else if (scroll.scroller) scroll.scroller.scrollTop += scroll.dy;
+  }
   scrollRaf = requestAnimationFrame(scrollTick);
 }
 
 function stopAutoScroll() {
-  scroll = { dx: 0, dy: 0, list: null };
+  scroll = { dx: 0, dy: 0, scroller: null };
   if (scrollRaf) cancelAnimationFrame(scrollRaf);
   scrollRaf = 0;
 }
@@ -255,14 +266,13 @@ document.addEventListener('dragover', (e) => {
   const left = Math.max(b.left, 0);
   const right = Math.min(b.right, innerWidth);
   scroll.dx = board.scrollWidth > board.clientWidth ? edgeSpeed(e.clientX, left, right) : 0;
-  // Verticale: la lista sotto il puntatore, oppure la board stessa (layout a colonna su schermi stretti).
   const list = e.target.closest?.('.plist');
-  const vScroller = list && list.scrollHeight > list.clientHeight ? list
-    : board.scrollHeight > board.clientHeight ? board : null;
-  if (vScroller) {
-    const r = vScroller.getBoundingClientRect();
+  const page = document.scrollingElement;
+  const scroller = list && canScrollY(list) ? list : canScrollY(board) ? board : page && canScrollY(page) ? page : null;
+  if (scroller) {
+    const r = scroller === page ? { top: 0, bottom: innerHeight } : scroller.getBoundingClientRect();
     scroll.dy = edgeSpeed(e.clientY, Math.max(r.top, 0), Math.min(r.bottom, innerHeight));
-    scroll.list = vScroller;
+    scroll.scroller = scroller;
   } else scroll.dy = 0;
   if ((scroll.dx || scroll.dy) && !scrollRaf) scrollRaf = requestAnimationFrame(scrollTick);
 }, true);
@@ -380,13 +390,17 @@ async function reloadPanel(panel) {
 function selectionBar(panel) {
   const keys = [...panel.selected];
   const only = keys.map((k) => panel.find(k)).filter(Boolean);
+  // Su touch il testo dei pulsanti si nasconde (.lbl) e restano le icone: la barra sta su una riga sola.
+  const act = (name, text, onClick, { danger = false, disabled = false, short = null } = {}) => h('button', {
+    type: 'button', class: `btn small${danger ? ' danger' : ''}`, title: text, 'aria-label': text, disabled: disabled || undefined, onClick,
+  }, icon(name, 14), h('span', { class: 'lbl' }, ` ${text}`), short ? h('span', { class: 'lbl-s' }, ` ${short}`) : null);
   return h('div', { class: 'selbar', role: 'toolbar', 'aria-label': 'Azioni sulla selezione' },
-    h('strong', null, `${keys.length} selezionati`),
-    h('button', { type: 'button', class: 'btn small', onClick: (e) => targetMenu(e.currentTarget, panel, keys, false) }, icon('layers', 14), ' Copia in…'),
-    h('button', { type: 'button', class: 'btn small', disabled: panel.readOnly, onClick: (e) => targetMenu(e.currentTarget, panel, keys, true) }, 'Sposta in…'),
-    h('button', { type: 'button', class: 'btn small', onClick: () => copyUrl(only.map((i) => i.url).join('\n'), `${only.length} URL copiati`) }, icon('copy', 14), ' URL'),
-    panel.kind === 'nuvio' ? h('button', { type: 'button', class: 'btn small', onClick: () => { panel.setEnabled(keys, !only.every((i) => i.enabled)); app.notifyPanel(panel); } }, icon('power', 14), ' Attiva/Disattiva') : null,
-    h('button', { type: 'button', class: 'btn small danger', onClick: () => removeKeys(panel, keys) }, icon('trash', 14), ' Rimuovi'),
+    h('strong', { class: 'selcount' }, h('span', { class: 'selicon' }, icon('check', 14)), `${keys.length}`, h('span', { class: 'lbl' }, ' selezionati')),
+    act('layers', 'Copia in…', (e) => targetMenu(e.currentTarget, panel, keys, false), { short: 'Copia' }),
+    act('move', 'Sposta in…', (e) => targetMenu(e.currentTarget, panel, keys, true), { disabled: panel.readOnly, short: 'Sposta' }),
+    act('link', 'Copia gli URL', () => copyUrl(only.map((i) => i.url).join('\n'), `${only.length} URL copiati`)),
+    panel.kind === 'nuvio' ? act('power', 'Attiva/Disattiva', () => { panel.setEnabled(keys, !only.every((i) => i.enabled)); app.notifyPanel(panel); }) : null,
+    act('trash', 'Rimuovi', () => removeKeys(panel, keys), { danger: true }),
     h('button', { type: 'button', class: 'icon-btn', title: 'Deseleziona', 'aria-label': 'Deseleziona', onClick: () => { panel.selected = new Set(); app.notifyPanel(panel); } }, icon('x')));
 }
 
@@ -400,7 +414,10 @@ function body(panel) {
   const rows = panel.items.map((it, n) => buildRow(panel, it, n));
   const list = h('ul', { class: 'plist', role: 'list', 'aria-label': `Addon di ${panel.title}` }, ...rows);
   if (!panel.items.length) {
-    return h('div', { class: 'plist empty' }, h('p', null, 'Nessun addon.'), h('p', { class: 'muted' }, 'Trascina qui degli addon da un altro pannello oppure usa «+».'));
+    return h('div', { class: 'plist empty' }, h('p', null, 'Nessun addon.'),
+      h('p', { class: 'muted' },
+        pc('Trascina qui degli addon da un altro pannello oppure usa «+».'),
+        touch('Aggiungi addon con «+», oppure copiali da un altro pannello con ⋯ → «Copia in…».')));
   }
   if (filterText && !rows.some((r) => !r.hidden)) list.append(h('li', { class: 'note muted' }, 'Nessun addon corrisponde alla ricerca.'));
   return list;
@@ -414,12 +431,13 @@ function buildPanel(panel) {
     dataset: { panel: panel.id }, style: { '--accent': safeColor(panel.color) },
     'aria-label': `${panel.kind === 'nuvio' ? 'Nuvio' : 'Stremio'} ${panel.title}`,
   },
+  h('div', { class: 'pstick' },
   h('header', { class: 'phead' },
     kindLogo(panel.kind),
     h('div', { class: 'ptitle' }, h('strong', null, panel.title), h('small', null, panel.kind === 'nuvio' ? `${app.accountOf(panel)?.label} · profilo ${panel.profile}` : panel.subtitle)),
     h('div', { class: 'pbtns' },
-      iconButton('undo', 'Annulla (Ctrl+Z)', () => { panel.undo(); app.notifyPanel(panel); }, { disabled: !panel.canUndo || undefined }),
-      iconButton('redo', 'Ripeti (Ctrl+Maiusc+Z)', () => { panel.redo(); app.notifyPanel(panel); }, { disabled: !panel.canRedo || undefined }),
+      iconButton('undo', 'Annulla', () => { panel.undo(); app.notifyPanel(panel); }, { title: 'Annulla (Ctrl+Z)', disabled: !panel.canUndo || undefined }),
+      iconButton('redo', 'Ripeti', () => { panel.redo(); app.notifyPanel(panel); }, { title: 'Ripeti (Ctrl+Maiusc+Z)', disabled: !panel.canRedo || undefined }),
       iconButton('plus', 'Aggiungi da URL', () => openInstall(panel), { disabled: !usable || undefined }),
       iconButton('more', 'Menu pannello', (e) => panelMenu(e.currentTarget, panel), { disabled: !usable || undefined }),
       iconButton('chevron', collapsed ? 'Espandi' : 'Comprimi', () => { app.toggleCollapsed(panel.id); app.notifyPanel(panel); }, { 'aria-expanded': String(!collapsed) }))),
@@ -430,7 +448,7 @@ function buildPanel(panel) {
     panel.dirty ? h('button', { type: 'button', class: 'btn small', onClick: () => app.discardPanel(panel) }, 'Annulla') : null,
     panel.dirty ? h('button', { type: 'button', class: 'btn small primary', disabled: panel.status === 'saving', onClick: () => app.savePanel(panel) },
       icon('save', 14), panel.status === 'saving' ? ' Salvataggio…' : ' Salva') : null),
-  !collapsed && panel.selected.size ? selectionBar(panel) : null,
+  !collapsed && panel.selected.size ? selectionBar(panel) : null),
   collapsed ? null : body(panel));
   wireDrop(section, panel);
   return section;
@@ -449,7 +467,7 @@ export function renderPanel(panel) {
   panelEls.set(panel.id, fresh);
   const nl = fresh.querySelector('.plist');
   if (nl) nl.scrollTop = scroll;
-  if (focusKey && focusCls !== null) fresh.querySelector(`.row[data-key="${focusKey}"]${focusCls ? ' ' + focusCls : ''}`)?.focus();
+  if (focusKey && focusCls !== null) fresh.querySelector(`.row[data-key="${focusKey}"]${focusCls ? ' ' + focusCls : ''}`)?.focus({ preventScroll: true });
   updateSaveAll();
 }
 
@@ -517,7 +535,11 @@ export function updateSaveAll() {
   const n = app.dirtyPanels().length;
   if (!saveAllBtn) return;
   saveAllBtn.disabled = n === 0;
-  saveAllBtn.replaceChildren(icon('save', 16), h('span', null, n ? `Salva tutto (${n})` : 'Salva tutto'));
+  fill(saveAllBtn,
+    icon('save', 16),
+    h('span', { class: 'lbl' }, n ? `Salva tutto (${n})` : 'Salva tutto'),
+    n ? h('span', { class: 'count-badge', 'aria-hidden': 'true' }, String(n)) : null);
+  saveAllBtn.title = n ? `Salva tutto (${n} ${n === 1 ? 'lista modificata' : 'liste modificate'})` : 'Salva tutto';
   renderAccounts(stripEl);
 }
 
@@ -542,10 +564,13 @@ function emptyState() {
   return h('div', { class: 'empty-state' },
     h('img', { class: 'empty-logo', src: 'img/logo.svg', alt: '', width: 72, height: 72 }),
     h('h2', null, 'Gestisci gli addon di tutti i tuoi account'),
-    h('p', null, 'Aggiungi uno o più account Stremio e Nuvio, poi trascina gli addon da una lista all\'altra per copiarli, riordinali e salva quando sei pronto.'),
+    h('p', null, 'Aggiungi uno o più account Stremio e Nuvio, poi copia e sposta gli addon tra le liste, riordinali e salva quando sei pronto.'),
     h('button', { type: 'button', class: 'btn primary large', onClick: () => openLogin() }, icon('plus', 16), ' Aggiungi il primo account'),
     h('ul', { class: 'tips' },
-      h('li', null, 'Le modifiche restano una bozza finché non premi «Salva».'),
-      h('li', null, 'Trascina per copiare tra account, ', h('kbd', null, 'Maiusc'), ' mentre rilasci per spostare.'),
+      h('li', null, pc('Le modifiche restano una bozza finché non premi «Salva».'), touch('Le modifiche restano una bozza finché non tocchi «Salva».')),
+      h('li', null,
+        pc('Trascina un addon in un\'altra lista per copiarlo; tieni premuto ', h('kbd', null, 'Maiusc'), ' mentre lo rilasci per spostarlo.'),
+        touch('Tocca ⋯ accanto a un addon e scegli «Copia in…» o «Sposta in…» per portarlo in un altro account.')),
+      h('li', null, touch('Riordina con le frecce ↑ ↓ accanto a ogni addon.'), pc('Riordina trascinando, oppure con ', h('kbd', null, 'Alt'), ' + ', h('kbd', null, '↑'), ' / ', h('kbd', null, '↓'), '.')),
       h('li', null, 'Le password non vengono salvate.')));
 }

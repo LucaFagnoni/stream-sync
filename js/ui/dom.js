@@ -15,6 +15,11 @@ export function h(tag, props, ...children) {
   return el;
 }
 
+/** Sostituisce i figli di `el` scartando null/undefined/false (replaceChildren nativo li scriverebbe come testo). */
+export function fill(el, ...children) {
+  el.replaceChildren(...children.flat(Infinity).filter((c) => c != null && c !== false));
+}
+
 function append(el, children) {
   for (const c of children.flat(Infinity)) {
     if (c == null || c === false) continue;
@@ -50,6 +55,7 @@ const ICONS = {
   sort: '<path d="M3 6h7M3 12h11M3 18h15"/>',
   power: '<path d="M18.4 6.6a9 9 0 1 1-12.8 0M12 2v10"/>',
   layers: '<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>',
+  move: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   chevron: '<path d="M6 9l6 6 6-6"/>',
   user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
 };

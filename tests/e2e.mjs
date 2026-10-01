@@ -152,6 +152,14 @@ const S = 'Stremio s@x.it';
 await step('stato iniziale: schermata vuota con invito ad aggiungere un account', async () => {
   await page.locator('.empty-state').waitFor();
   assert(await page.locator('#save-all').isDisabled(), 'Salva tutto dovrebbe essere disabilitato');
+  eq((await page.locator('#save-all').innerText()).trim(), 'Salva tutto', 'il pulsante non deve mostrare "null" o altro testo');
+});
+
+await step('desktop: istruzioni per mouse e tastiera (Maiusc, scorciatoia "/"), non quelle per il touch', async () => {
+  const tips = await page.locator('.empty-state .tips').innerText();
+  assert(/Maiusc/.test(tips) && /Trascina/.test(tips), `testo PC mancante: ${tips}`);
+  assert(!/Tocca/.test(tips) && !/⋯/.test(tips), `testo touch visibile su desktop: ${tips}`);
+  assert((await page.locator('#search').getAttribute('placeholder')).includes('( / )'), 'manca il suggerimento della scorciatoia');
 });
 
 await step('login con credenziali errate mostra un errore in italiano e non aggiunge nulla', async () => {
@@ -180,6 +188,13 @@ await step('Nuvio: login, 3 profili, il profilo che condivide gli addon è in so
   assert(sync.auth === 'Bearer AT1', 'Bearer mancante');
 });
 
+await step('spazio tra le linguette degli account e i pannelli (desktop)', async () => {
+  const chips = await page.locator('#accounts').boundingBox();
+  const first = await page.locator('section.panel').first().boundingBox();
+  const gap = Math.round(first.y - (chips.y + chips.height));
+  assert(gap >= 20, `spazio troppo stretto: ${gap}px`);
+});
+
 await step('nessuna password in localStorage, solo i token di sessione', async () => {
   const dump = await page.evaluate(() => JSON.stringify({ ...localStorage }));
   assert(!dump.includes('"pw"') && !/password/i.test(dump), 'password trovata nello storage!');
@@ -195,6 +210,10 @@ await step('drag & drop Stremio → Nuvio (Kids): copia in bozza, origine intatt
   assert(await panel('Nuvio Kids').locator('.changes', { hasText: '+1' }).count() === 1, 'riepilogo modifiche assente');
   eq(log.filter((l) => l.path?.includes('sync_push')).length, pushesBefore, 'scrittura prematura sul server');
   assert(!(await page.locator('#save-all').isDisabled()), 'Salva tutto dovrebbe attivarsi');
+});
+
+await step('"Salva tutto" mostra il numero di liste modificate, senza "null"', async () => {
+  eq((await page.locator('#save-all').innerText()).trim(), 'Salva tutto (1)');
 });
 
 await step('salvataggio Nuvio: body RPC corretto (sort_order, enabled, nome) e rilettura', async () => {
@@ -240,6 +259,27 @@ await step('trascinando verso il bordo la board scorre fino a un pannello fuori 
   await page.evaluate(() => { document.getElementById('board').scrollLeft = 0; });
 });
 
+await step('finestra stretta: trascinando vicino al bordo inferiore scorre la PAGINA fino a un pannello sotto', async () => {
+  await page.setViewportSize({ width: 390, height: 700 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const kids = panel('Nuvio Kids');
+  assert((await kids.boundingBox()).y > 700, 'Kids dovrebbe essere sotto lo schermo');
+  const box = await row(panel(S), 'Addon B').boundingBox();
+  await page.mouse.move(box.x + 60, box.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 90, box.y + 40, { steps: 3 });
+  // 30px dal bordo: lo scorrimento nativo di Chromium parte solo negli ultimi ~8px, quindi scorre solo grazie all'app
+  await page.mouse.move(200, 670, { steps: 10 });
+  await page.waitForFunction(() => document.querySelector('section[aria-label="Nuvio Kids"] .plist').getBoundingClientRect().top < 450, null, { timeout: 15000 });
+  await page.mouse.move(200, 500, { steps: 4 });
+  await page.waitForTimeout(250);
+  await page.mouse.up();
+  await row(kids, 'Addon B').waitFor();
+  await kids.locator('button:has-text("Annulla")').first().click();
+  await page.setViewportSize({ width: 1500, height: 900 });
+  await page.evaluate(() => { window.scrollTo(0, 0); document.getElementById('board').scrollLeft = 0; });
+});
+
 await step('loghi Stremio e Nuvio caricati nelle schede', async () => {
   // I pannelli si ridisegnano spesso (nuovi <img> dalla cache): si attende il caricamento invece di campionare un istante.
   await page.waitForFunction(() => {
@@ -254,9 +294,9 @@ await step('riordino con i pulsanti + undo/redo; il salvataggio scrive il nuovo 
   const p = panel(S);
   await row(p, 'Addon B').locator('button[aria-label="Sposta su"]').click();
   eq(await names(p), ['Cinemeta', 'Addon A', 'Addon B', 'Addon X'].slice(0, 1).concat(['Addon B', 'Addon A', 'Addon X']));
-  await p.locator('button[aria-label^="Annulla (Ctrl"]').click();
+  await p.locator('button[aria-label="Annulla"]').click();
   eq(await names(p), ['Cinemeta', 'Addon A', 'Addon B', 'Addon X'], 'undo');
-  await p.locator('button[aria-label^="Ripeti"]').click();
+  await p.locator('button[aria-label="Ripeti"]').click();
   await clearToasts();
   await p.locator('button:has-text("Salva")').click();
   await toast(/Salvato: s@x.it/).waitFor();
@@ -454,6 +494,17 @@ await step('Stremio rifiuta gli URL non scaricabili (serve il manifest completo)
   await page.click('dialog button:has-text("Chiudi")');
 });
 
+await step('sincronizza: l\'anteprima della modalità predefinita non contiene "null"', async () => {
+  await panel('Nuvio Kids').locator('button[aria-label="Menu pannello"]').click();
+  await page.click('.menu-item:has-text("Sincronizza")');
+  const dlg = page.locator('dialog[open]');
+  await dlg.locator('.mirror-preview').waitFor();
+  const text = await dlg.locator('.mirror-preview').innerText();
+  assert(!/null/.test(text), `anteprima: ${text}`);
+  assert(/da aggiungere/.test(text));
+  await dlg.locator('button:has-text("Annulla")').click();
+});
+
 await step('sincronizza (specchio) Stremio → Kids: stessa lista e ordine, gli extra vengono rimossi', async () => {
   const kids = panel('Nuvio Kids');
   await kids.locator('button[aria-label="Menu pannello"]').click();
@@ -561,6 +612,146 @@ await step('"Ricordami" spento: token solo in sessionStorage, sopravvive al relo
   await other.goto(APP);
   await other.locator('.account-card button:has-text("Accedi")').waitFor();
   await ctx.close();
+});
+
+// ---------- telefono: contesto mobile con eventi touch reali ----------
+let mctx; let mpage; let mcdp;
+const mp = (label) => mpage.locator(`section.panel[aria-label="${label}"]`);
+// Swipe vero (touchStart/Move/End): la pagina decide chi scorre, come con un dito.
+const swipe = async (x, y0, y1, steps = 8) => {
+  await mcdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0 }] });
+  for (let k = 1; k <= steps; k++) {
+    await mcdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y0 + ((y1 - y0) * k) / steps }] });
+    await mpage.waitForTimeout(16);
+  }
+  await mcdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+};
+
+// Un tap su una pagina che sta ancora scorrendo per inerzia serve a fermarla (come su un telefono vero):
+// prima di toccare si aspetta che lo scorrimento sia fermo.
+const settle = async () => {
+  let last = -1; let stable = 0;
+  for (let k = 0; k < 60 && stable < 4; k++) {
+    const y = await mpage.evaluate(() => scrollY);
+    stable = y === last ? stable + 1 : 0;
+    last = y;
+    await mpage.waitForTimeout(60);
+  }
+};
+
+await step('telefono: istruzioni per il tocco (niente Maiusc/Alt/trascina) e ricerca senza scorciatoia', async () => {
+  db = freshDb();
+  db.stremio.addons = Array.from({ length: 30 }, (_, n) => ({ transportUrl: `https://gen${n}.test/manifest.json`, manifest: manifestOf('g' + n, 'Addon generato ' + n), flags: {} }));
+  mctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await installMocks(mctx);
+  mpage = await mctx.newPage();
+  mpage.on('pageerror', (e) => errors.push(`pageerror(telefono): ${e.message}`));
+  mpage.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|net::ERR/.test(m.text())) errors.push(`console(telefono): ${m.text()} @ ${JSON.stringify(m.location())}`); });
+  await mpage.goto(APP);
+  const tips = await mpage.locator('.empty-state .tips').innerText();
+  assert(!/\b(Maiusc|Alt|Ctrl)\b|[Tt]rascin/.test(tips), `testo da PC su telefono: ${tips}`);
+  assert(/Copia in…/.test(tips) && /frecce/.test(tips), `istruzioni touch mancanti: ${tips}`);
+  eq(await mpage.locator('#search').getAttribute('placeholder'), 'Cerca in tutte le liste');
+  const desc = await mpage.locator('.empty-state > p').innerText();
+  assert(!/trascina/i.test(desc), `la descrizione parla di trascinare: ${desc}`);
+});
+
+await step('telefono: le liste non sono scroller annidati (scorre solo la pagina)', async () => {
+  await addAccount('stremio', 's@x.it', 'pw', { remember: false, on: mpage });
+  await mpage.locator('section.panel .row').first().waitFor();
+  await addAccount('nuvio', 'n@x.it', 'pw', { remember: false, on: mpage });
+  await mp('Nuvio Main').locator('.row').first().waitFor();
+  const m = await mpage.evaluate(() => {
+    const pl = document.querySelector('.plist');
+    const board = document.getElementById('board');
+    return { overflow: getComputedStyle(pl).overflowY, plist: pl.scrollHeight > pl.clientHeight + 1, board: board.scrollHeight > board.clientHeight + 1, page: document.scrollingElement.scrollHeight > innerHeight + 500 };
+  });
+  eq(m, { overflow: 'visible', plist: false, board: false, page: true });
+});
+
+await step('telefono: uno swipe SOPRA la lista scorre la pagina, anche senza aspettare l\'inerzia, e si raggiungono gli altri account', async () => {
+  mcdp = await mctx.newCDPSession(mpage);
+  await swipe(200, 700, 250);
+  await swipe(200, 700, 250); // subito dopo, mentre l'inerzia del primo non è finita
+  const y = await mpage.evaluate(() => scrollY);
+  assert(y > 600, `la pagina non ha seguito i due swipe: scrollY=${y}`);
+  eq(await mpage.evaluate(() => document.querySelector('.plist').scrollTop), 0, 'la lista ha catturato il gesto');
+  let top = Infinity;
+  for (let k = 0; k < 25 && top > 600; k++) {
+    await swipe(200, 700, 150);
+    top = (await mp('Nuvio Main').boundingBox()).y;
+  }
+  assert(top < 600, `il pannello Nuvio sotto non è stato raggiunto (top=${top})`);
+  await settle();
+});
+
+await step('telefono: l\'intestazione del pannello resta agganciata in alto mentre si scorre', async () => {
+  await mpage.evaluate(() => window.scrollTo(0, 900));
+  const r = await mpage.evaluate(() => {
+    const el = document.querySelector('section[aria-label^="Stremio"] .pstick');
+    return { top: Math.round(el.getBoundingClientRect().top), position: getComputedStyle(el).position };
+  });
+  eq(r, { top: 0, position: 'sticky' });
+});
+
+await step('telefono: spazio tra le linguette e il primo pannello', async () => {
+  await mpage.evaluate(() => window.scrollTo(0, 0));
+  const chips = await mpage.locator('#accounts').boundingBox();
+  const first = await mpage.locator('section.panel').first().boundingBox();
+  const gap = Math.round(first.y - (chips.y + chips.height));
+  assert(gap >= 20, `spazio troppo stretto: ${gap}px`);
+});
+
+await step('telefono: un pannello compresso occupa poco spazio e si riapre', async () => {
+  await mpage.evaluate(() => window.scrollTo(0, 0));
+  await settle();
+  const st = mp('Stremio s@x.it');
+  const before = Math.round((await st.boundingBox()).height);
+  await st.locator('button[aria-label="Comprimi"]').tap();
+  // il click nasce dopo il touchend: si aspetta che il pannello sia davvero compresso prima di misurarlo
+  await mpage.waitForFunction(() => document.querySelector('section[aria-label^="Stremio"]').classList.contains('collapsed'), null, { timeout: 5000 });
+  const h = Math.round((await st.boundingBox()).height);
+  assert(h < 120, `pannello compresso alto ${h}px (da ${before}px)`);
+  await st.locator('button[aria-label="Espandi"]').tap();
+  await st.locator('.row').first().waitFor();
+});
+
+await step('telefono: azioni di riga sempre visibili con bersagli da almeno 36px', async () => {
+  const r = await mpage.evaluate(() => {
+    const b = document.querySelector('section[aria-label^="Stremio"] .row button[aria-label="Altre azioni"]');
+    const box = b.getBoundingClientRect();
+    return { w: Math.round(box.width), h: Math.round(box.height), opacity: getComputedStyle(b.closest('.ractions')).opacity };
+  });
+  assert(r.w >= 36 && r.h >= 36 && r.opacity === '1', JSON.stringify(r));
+});
+
+await step('telefono: copia con il tocco (⋯ → Copia in… → Luca/Main)', async () => {
+  await settle();
+  await mpage.locator('section[aria-label^="Stremio"] .row').nth(2).locator('button[aria-label="Altre azioni"]').tap();
+  await mpage.locator('.menu-item:has-text("Copia in…")').tap();
+  await mpage.locator('.menu-item:has-text("Main")').tap();
+  await mpage.locator('.toast', { hasText: /Copiati 1 in «Main»/ }).waitFor();
+  await mp('Nuvio Main').locator('.row', { hasText: 'Addon generato 2' }).waitFor();
+});
+
+await step('telefono: barra di selezione su una riga con le parole brevi; "Salva tutto" senza "null"', async () => {
+  await mpage.evaluate(() => window.scrollTo(0, 0));
+  await settle();
+  const sels = mpage.locator('section[aria-label^="Stremio"] .row .sel');
+  await sels.nth(0).check();
+  await sels.nth(1).check();
+  const bar = await mpage.evaluate(() => {
+    const b = document.querySelector('section[aria-label^="Stremio"] .selbar');
+    const visible = (el) => el.offsetParent !== null;
+    return { h: Math.round(b.getBoundingClientRect().height), short: [...b.querySelectorAll('.lbl-s')].filter(visible).map((e) => e.textContent.trim()), full: [...b.querySelectorAll('.lbl')].some(visible) };
+  });
+  assert(bar.h <= 64, `barra su più righe: ${bar.h}px`);
+  eq(bar.short, ['Copia', 'Sposta']);
+  assert(!bar.full, 'etichette lunghe ancora visibili');
+  await mpage.locator('section[aria-label^="Stremio"] .selbar button[aria-label="Rimuovi"]').tap();
+  const text = await mpage.locator('#save-all').textContent();
+  assert(!/null/.test(text) && /Salva tutto \(\d\)/.test(text), `testo del pulsante: ${JSON.stringify(text)}`);
+  await mctx.close();
 });
 
 await step('nessun errore JS / violazione CSP in console', async () => {
