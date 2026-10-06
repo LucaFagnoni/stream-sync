@@ -548,6 +548,16 @@ function body(panel) {
   return list;
 }
 
+/** Avatar dei profili Nuvio che condividono gli addon di questo pannello (solo sul Profilo 1). */
+function linkedProfiles(panel) {
+  if (panel.kind !== 'nuvio' || panel.profile !== 1) return null;
+  const linked = (app.accountOf(panel)?.panelIds ?? []).map((id) => state.panels.get(id)).filter((p) => p?.readOnly);
+  if (!linked.length) return null;
+  const label = t('Also used by: {names}', { names: linked.map((p) => p.title).join(', ') });
+  return h('div', { class: 'plinked', role: 'img', 'aria-label': label, title: label },
+    ...linked.map((p) => h('span', { class: 'pavatar', style: { '--accent': safeColor(p.color) } }, (p.title.trim().charAt(0) || '?').toUpperCase())));
+}
+
 function buildPanel(panel) {
   const usable = panel.status === 'ready' && !panel.readOnly;
   const collapsed = !!state.settings.collapsed[panel.id];
@@ -560,6 +570,7 @@ function buildPanel(panel) {
   h('header', { class: 'phead' },
     kindLogo(panel.kind),
     h('div', { class: 'ptitle' }, h('strong', null, panel.title), h('small', null, panel.kind === 'nuvio' ? t('{account} · profile {n}', { account: app.accountOf(panel)?.label, n: panel.profile }) : panel.subtitle)),
+    linkedProfiles(panel),
     h('div', { class: 'pbtns' },
       iconButton('undo', t('Undo'), () => { panel.undo(); app.notifyPanel(panel); }, { title: t('Undo (Ctrl+Z)'), disabled: !panel.canUndo || undefined, dataset: { act: 'undo' } }),
       iconButton('redo', t('Redo'), () => { panel.redo(); app.notifyPanel(panel); }, { title: t('Redo (Ctrl+Shift+Z)'), disabled: !panel.canRedo || undefined, dataset: { act: 'redo' } }),
@@ -710,7 +721,8 @@ export function renderBoard() {
   for (const acc of state.accounts) {
     const panels = acc.panelIds.map((id) => state.panels.get(id)).filter(Boolean);
     if (!panels.length || acc.status === 'auth') cards.push(accountCard(acc));
-    for (const p of panels) {
+    // I profili che usano gli addon del Profilo 1 non hanno una lista propria: compaiono come icone nel Profilo 1.
+    for (const p of panels.filter((x) => !x.readOnly)) {
       const el = buildPanel(p);
       panelEls.set(p.id, el);
       cards.push(el);

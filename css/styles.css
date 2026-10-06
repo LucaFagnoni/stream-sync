@@ -91,6 +91,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .pstick { flex: none; }
 .touch-only, .selicon, .count-badge, .lbl-s { display: none; }
 .phead { display: flex; align-items: center; gap: 10px; padding: 10px 10px 8px 12px; }
+.plinked { display: flex; flex-shrink: 0; }
+.pavatar { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; background: var(--accent); border: 2px solid var(--surface); }
+.pavatar + .pavatar { margin-left: -7px; }
 .ptitle { flex: 1; min-width: 0; display: flex; flex-direction: column; } .ptitle strong, .ptitle small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ptitle small { color: var(--muted); font-size: 12px; }
 .pbtns { display: flex; }
 .pbar { display: flex; align-items: center; gap: 8px; padding: 0 12px 8px; border-bottom: 1px solid var(--border); min-height: 38px; }

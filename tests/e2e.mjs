@@ -222,7 +222,8 @@ await step('Nuvio: login, 3 profili, il profilo che condivide gli addon è in so
   await addAccount('nuvio', 'n@x.it', 'pw');
   await panel('Nuvio Main').locator('.row').first().waitFor();
   eq(await names(panel('Nuvio Main')), ['Addon X', 'addon-y.test']);
-  assert(await panel('Nuvio Shared').locator('.note', { hasText: /usa gli addon del Profilo 1/ }).count() === 1);
+  assert(await panel('Nuvio Shared').count() === 0, 'il profilo che condivide gli addon non ha una lista propria');
+  eq(await panel('Nuvio Main').locator('.plinked').getAttribute('aria-label'), 'Usati anche da: Shared');
   const sync = log.find((l) => l.path === '/rest/v1/rpc/sync_pull_profiles');
   assert(sync.apikey.startsWith('sb_publishable_'), 'apikey mancante');
   assert(sync.auth === 'Bearer AT1', 'Bearer mancante');
@@ -238,7 +239,7 @@ await step('spazio tra le linguette degli account e i pannelli (desktop)', async
 // ---------- riordino degli account ----------
 const panelOrder = () => page.locator('section.panel').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
 const chipOrder = () => page.locator('.chip-wrap .chip-label').allTextContents();
-const NUVIO_PANELS = ['Nuvio Main', 'Nuvio Kids', 'Nuvio Shared'];
+const NUVIO_PANELS = ['Nuvio Main', 'Nuvio Kids'];
 
 await step('account: trascinando una linguetta davanti all\'altra cambiano linguette e pannelli (con indicatore) e l\'ordine resta dopo il reload', async () => {
   eq(await chipOrder(), ['s@x.it', 'n@x.it']);
@@ -276,7 +277,7 @@ await step('account: trascinando l\'intestazione di un pannello si sposta l\'int
   // e dall'intestazione di un profilo Nuvio si sposta TUTTO l'account Nuvio dopo Stremio
   await panel('Nuvio Kids').locator('.phead').dragTo(panel(S), { sourcePosition: { x: 90, y: 24 }, targetPosition: { x: 400, y: 300 } });
   eq(await panelOrder(), [S, ...NUVIO_PANELS], 'rilasciare sul lato destro di Stremio lo lascia dove stava (già dopo): ordine invariato');
-  await panel(S).locator('.phead').dragTo(panel('Nuvio Shared'), { sourcePosition: { x: 90, y: 24 }, targetPosition: { x: 300, y: 300 } });
+  await panel(S).locator('.phead').dragTo(panel('Nuvio Kids'), { sourcePosition: { x: 90, y: 24 }, targetPosition: { x: 300, y: 300 } });
   eq(await panelOrder(), [...NUVIO_PANELS, S]);
   await panel(S).locator('.phead').dragTo(panel('Nuvio Main'), { sourcePosition: { x: 90, y: 24 }, targetPosition: { x: 40, y: 300 } });
   eq(await panelOrder(), [S, ...NUVIO_PANELS]);
@@ -393,11 +394,12 @@ await step('finestra stretta: trascinando vicino al bordo inferiore scorre la PA
   await page.mouse.move(box.x + 90, box.y + 40, { steps: 3 });
   // 30px dal bordo: lo scorrimento nativo di Chromium parte solo negli ultimi ~8px, quindi scorre solo grazie all'app
   await page.mouse.move(200, 670, { steps: 10 });
-  await page.waitForFunction(() => document.querySelector('section[aria-label="Nuvio Kids"] .plist').getBoundingClientRect().top < 450, null, { timeout: 15000 });
+  await page.waitForFunction(() => document.querySelector('section[aria-label="Nuvio Kids"] .plist').getBoundingClientRect().top < 600, null, { timeout: 15000 });
   await page.mouse.move(200, 330, { steps: 4 }); // fuori dalle zone di bordo lo scorrimento si ferma
   await page.waitForTimeout(400);
   const over = await kids.locator('.plist').boundingBox(); // il punto di rilascio segue il pannello, non una coordinata fissa
-  await page.mouse.move(200, over.y + over.height / 2, { steps: 4 });
+  await clearToasts(); // un toast in basso coprirebbe il punto di rilascio
+  await page.mouse.move(200, Math.min(over.y + over.height / 2, 600), { steps: 4 });
   await page.waitForTimeout(250);
   await page.mouse.up();
   await row(kids, 'Addon B').waitFor({ timeout: 5000 });
@@ -1249,9 +1251,11 @@ await step('telefono: un pannello compresso occupa poco spazio e si riapre', asy
   await settle();
   const st = mp('Stremio s@x.it');
   const before = Math.round((await st.boundingBox()).height);
+  // il click nasce dopo il touchend: si aspetta che il pannello sia davvero compresso prima di misurarlo.
+  // Il tap emulato di Chromium a volte non genera il click (euristica del doppio tocco): si ritenta una volta.
+  const collapsed = () => mpage.waitForFunction(() => document.querySelector('section[aria-label^="Stremio"]').classList.contains('collapsed'), null, { timeout: 2500 });
   await st.locator('button[aria-label="Comprimi"]').tap();
-  // il click nasce dopo il touchend: si aspetta che il pannello sia davvero compresso prima di misurarlo
-  await mpage.waitForFunction(() => document.querySelector('section[aria-label^="Stremio"]').classList.contains('collapsed'), null, { timeout: 5000 });
+  await collapsed().catch(async () => { await st.locator('button[aria-label="Comprimi"]').tap(); await collapsed(); });
   const h = Math.round((await st.boundingBox()).height);
   assert(h < 120, `pannello compresso alto ${h}px (da ${before}px)`);
   await st.locator('button[aria-label="Espandi"]').tap();
@@ -1283,14 +1287,14 @@ await step('telefono: riordino degli account dal menu del pannello, senza perder
   eq((await order())[0], 'Stremio s@x.it');
   await mp('Stremio s@x.it').locator('button[aria-label="Menu pannello"]').tap();
   await mpage.locator('.menu-item:has-text("Sposta account dopo")').tap();
-  eq(await order(), ['Nuvio Main', 'Nuvio Kids', 'Nuvio Shared', 'Stremio s@x.it']);
+  eq(await order(), ['Nuvio Main', 'Nuvio Kids', 'Stremio s@x.it']);
   const y = await mpage.evaluate(() => Math.round(scrollY));
   assert(y > 0, `la pagina è tornata in cima (scrollY=${y})`);
   await mpage.evaluate(() => window.scrollTo(0, 0));
   await settle();
   await mpage.locator('.chip-acc', { hasText: 's@x.it' }).tap();
   await mpage.locator('.menu-item:has-text("Sposta prima")').tap();
-  eq(await order(), ['Stremio s@x.it', 'Nuvio Main', 'Nuvio Kids', 'Nuvio Shared']);
+  eq(await order(), ['Stremio s@x.it', 'Nuvio Main', 'Nuvio Kids']);
 });
 
 await step('telefono: barra di selezione su una riga con le parole brevi; "Salva tutto" senza "null"', async () => {

@@ -321,4 +321,5 @@ export default {
   "“{name}” restored. Save to apply.": "“{name}” ripristinato. Salva per applicare.",
   "“{name}” not restored: {error}": "“{name}” non ripristinato: {error}",
   "Saving in progress, try again in a moment.": "Salvataggio in corso, riprova tra un momento.",
+  "Also used by: {names}": "Usati anche da: {names}",
 };
