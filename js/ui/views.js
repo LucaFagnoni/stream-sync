@@ -555,7 +555,13 @@ function linkedProfiles(panel) {
   if (!linked.length) return null;
   const label = t('Also used by: {names}', { names: linked.map((p) => p.title).join(', ') });
   return h('div', { class: 'plinked', role: 'img', 'aria-label': label, title: label },
-    ...linked.map((p) => h('span', { class: 'pavatar', style: { '--accent': safeColor(p.color) } }, (p.title.trim().charAt(0) || '?').toUpperCase())));
+    ...linked.map((p) => {
+      const el = h('span', { class: 'pavatar', style: { '--accent': safeColor(p.color) } }, (p.title.trim().charAt(0) || '?').toUpperCase());
+      if (!p.avatar || !httpUrl(p.avatar)) return el;
+      const img = h('img', { class: 'pavatar', src: p.avatar, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', draggable: 'false', style: { '--accent': safeColor(p.color) } });
+      img.addEventListener('error', () => img.replaceWith(el), { once: true });
+      return img;
+    }));
 }
 
 function buildPanel(panel) {

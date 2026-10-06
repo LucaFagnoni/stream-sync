@@ -1,7 +1,7 @@
 // Client per la API pubblica Nuvio (Supabase-compatibile): https://nuvio.tv/docs
 // L'header `apikey` è la *publishable key* pubblicata nella documentazione ufficiale.
 
-import { timeoutSignal, isTimeout } from './util.js';
+import { timeoutSignal, isTimeout, isHttpUrl } from './util.js';
 import { t } from './i18n.js';
 
 export const NUVIO_BASE = 'https://api.nuvio.tv';
@@ -129,15 +129,27 @@ export class NuvioSession {
     try { await raw('/auth/v1/logout?scope=local', { method: 'POST', token: this.session.access_token }); } catch { /* best effort */ }
   }
 
-  /** @returns {Promise<{index:number,name:string,color:string|null,usesPrimary:boolean}[]>} */
+  /** @returns {Promise<{index:number,name:string,color:string|null,avatar:string|null,usesPrimary:boolean}[]>} */
   async listProfiles() {
     const rows = await this.rpc('sync_pull_profiles');
+    // Immagine del profilo: URL diretto, oppure un id del catalogo pubblico (come fanno le app Nuvio).
+    // Gli avatar riservati ai sostenitori non sono nel catalogo pubblico: lì resta l'iniziale.
+    const needsCatalog = Array.isArray(rows) && rows.some((p) => p?.avatar_id && !p.avatar_url);
+    const catalog = needsCatalog ? await this.rpc('get_avatar_catalog').catch(() => []) : [];
+    const pathOf = new Map((Array.isArray(catalog) ? catalog : []).map((c) => [c?.id, c?.storage_path]));
+    const avatarOf = (p) => {
+      const path = pathOf.get(p.avatar_id);
+      const url = typeof p.avatar_url === 'string' && p.avatar_url ? p.avatar_url
+        : typeof path === 'string' && path ? `${NUVIO_BASE}/storage/v1/object/public/avatars/${path.split('/').map(encodeURIComponent).join('/')}` : null;
+      return url && isHttpUrl(url) ? url : null;
+    };
     const list = (Array.isArray(rows) ? rows : [])
       .filter((p) => p && typeof p === 'object')
       .map((p) => ({
         index: Number(p.profile_index),
         name: (typeof p.name === 'string' && p.name.trim()) || t('Profile {n}', { n: p.profile_index }),
         color: typeof p.avatar_color_hex === 'string' ? p.avatar_color_hex : null,
+        avatar: avatarOf(p),
         usesPrimary: Number(p.profile_index) !== 1 && !!p.uses_primary_addons,
       }))
       .filter((p) => Number.isInteger(p.index) && p.index >= 1 && p.index <= MAX_PROFILES)
@@ -145,7 +157,7 @@ export class NuvioSession {
     // Un account nuovo può non avere ancora righe: il profilo 1 esiste sempre.
     return list.some((p) => p.index === 1)
       ? list
-      : [{ index: 1, name: t('Profile {n}', { n: 1 }), color: null, usesPrimary: false }, ...list];
+      : [{ index: 1, name: t('Profile {n}', { n: 1 }), color: null, avatar: null, usesPrimary: false }, ...list];
   }
 
   async listAddons(profile) {

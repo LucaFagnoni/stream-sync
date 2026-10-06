@@ -178,7 +178,7 @@ export async function connectAccount(acc) {
       const profiles = await acc.nuvio.listProfiles();
       const panels = profiles.map((pr) => new Panel({
         id: `${acc.id}:${pr.index}`, accountId: acc.id, kind: 'nuvio', profile: pr.index,
-        title: pr.name, subtitle: acc.email, color: pr.color || '#1e88e5',
+        title: pr.name, subtitle: acc.email, color: pr.color || '#1e88e5', avatar: pr.avatar,
         readOnly: pr.usesPrimary,
         readOnlyReason: t('This profile uses the addons of Profile 1: edit them there.'),
       }));

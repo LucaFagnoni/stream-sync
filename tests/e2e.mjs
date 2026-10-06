@@ -30,7 +30,7 @@ function freshDb() {
       profiles: [
         { profile_index: 1, name: 'Main', avatar_color_hex: '#1E88E5', uses_primary_addons: false },
         { profile_index: 2, name: 'Kids', avatar_color_hex: '#FF5722', uses_primary_addons: false },
-        { profile_index: 3, name: 'Shared', avatar_color_hex: '#43A047', uses_primary_addons: true },
+        { profile_index: 3, name: 'Shared', avatar_color_hex: '#43A047', avatar_id: 'av1', uses_primary_addons: true },
       ],
       addons: {
         1: [{ url: 'https://addon-x.test/manifest.json', name: 'Addon X', enabled: true, sort_order: 0 }, { url: 'https://addon-y.test/manifest.json', name: null, enabled: true, sort_order: 1 }],
@@ -71,6 +71,7 @@ async function installMocks(context) {
     const h = req.headers();
     log.push({ svc: 'nuvio', method: req.method(), path: url.pathname + url.search, body, auth: h.authorization, apikey: h.apikey });
     const json = (o, status = 200) => route.fulfill({ status, headers: { ...CORS, 'content-type': 'application/json' }, body: JSON.stringify(o) });
+    if (url.pathname.startsWith('/storage/v1/object/public/avatars/')) return route.fulfill({ status: 200, headers: { 'content-type': 'image/png' }, path: 'img/icon-192.png' });
     if (url.pathname === '/auth/v1/token') {
       if (url.searchParams.get('grant_type') === 'password') {
         return body.email === 'n@x.it' && body.password === 'pw'
@@ -82,6 +83,7 @@ async function installMocks(context) {
     if (url.pathname === '/auth/v1/logout') return route.fulfill({ status: 204, headers: CORS });
     if (h.authorization !== `Bearer ${db.nuvio.token}`) return json({ message: 'JWT expired' }, 401);
     if (url.pathname === '/rest/v1/rpc/sync_pull_profiles') return json(db.nuvio.profiles);
+    if (url.pathname === '/rest/v1/rpc/get_avatar_catalog') return json([{ id: 'av1', display_name: 'Fox', storage_path: 'animals/fox.png', category: 'animals' }]);
     if (url.pathname === '/rest/v1/addons') {
       const p = Number(url.searchParams.get('profile_id').replace('eq.', ''));
       return json((db.nuvio.addons[p] || []).map((a, i) => ({ id: `id${p}${i}`, ...a })));
@@ -224,6 +226,9 @@ await step('Nuvio: login, 3 profili, il profilo che condivide gli addon è in so
   eq(await names(panel('Nuvio Main')), ['Addon X', 'addon-y.test']);
   assert(await panel('Nuvio Shared').count() === 0, 'il profilo che condivide gli addon non ha una lista propria');
   eq(await panel('Nuvio Main').locator('.plinked').getAttribute('aria-label'), 'Usati anche da: Shared');
+  // l'avatar del catalogo Nuvio si vede al posto dell'iniziale
+  await page.waitForFunction(() => { const i = document.querySelector('section[aria-label="Nuvio Main"] img.pavatar'); return i?.complete && i.naturalWidth > 0; }, null, { timeout: 5000 });
+  eq(await panel('Nuvio Main').locator('img.pavatar').getAttribute('src'), 'https://api.nuvio.tv/storage/v1/object/public/avatars/animals/fox.png');
   const sync = log.find((l) => l.path === '/rest/v1/rpc/sync_pull_profiles');
   assert(sync.apikey.startsWith('sb_publishable_'), 'apikey mancante');
   assert(sync.auth === 'Bearer AT1', 'Bearer mancante');
