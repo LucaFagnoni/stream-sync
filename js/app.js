@@ -520,4 +520,39 @@ export function itemFromProbe(p, kind) {
   });
 }
 
+// ---------- vault degli addon protetti ----------
+/**
+ * Addon di sistema di Stremio, per ripristinarli dopo una rimozione forzata. Il manifest si scarica dal vivo;
+ * `fallback` serve solo a Local Files, che vive sul server locale di Stremio e dal browser di solito non risponde.
+ */
+export const VAULT = [
+  { name: 'Cinemeta', url: 'https://v3-cinemeta.strem.io/manifest.json', flags: { official: true, protected: true } },
+  {
+    name: 'Local Files', url: 'http://127.0.0.1:11470/local-addon/manifest.json', flags: { official: true, protected: true }, only: 'stremio',
+    fallback: {
+      id: 'org.stremio.local', version: '1.10.0', name: 'Local Files (without catalog support)',
+      description: 'Local add-on to find playable files: .torrent, .mp4, .mkv and .avi',
+      types: ['movie', 'series', 'other'], catalogs: [],
+      resources: [{ name: 'meta', types: ['other'], idPrefixes: ['local:', 'bt:'] }, { name: 'stream', types: ['movie', 'series'], idPrefixes: ['tt'] }],
+    },
+  },
+  { name: 'OpenSubtitles v3', url: 'https://opensubtitles-v3.strem.io/manifest.json', flags: { official: true } },
+  { name: 'WatchHub', url: 'https://watchhub.strem.io/manifest.json', flags: { official: true } },
+];
+
+/** Reinserisce in testa un addon del vault (in bozza, come ogni altra modifica). */
+export async function restoreFromVault(panel, entry) {
+  if (panel.has(entry.url)) return { ok: false, error: t('Already present') };
+  const r = await fetchManifest(entry.url);
+  const manifest = r.ok ? r.manifest : entry.fallback;
+  if (!manifest && panel.kind === 'stremio') return { ok: false, error: r.error };
+  const item = makeItem({
+    url: entry.url, name: manifest?.name || entry.name, isNew: true,
+    manifest: manifest || null, flags: panel.kind === 'stremio' ? { ...entry.flags } : {},
+  });
+  if (!panel.insert([item], 0)) return { ok: false, error: t('Saving in progress, try again in a moment.') };
+  notifyPanel(panel);
+  return { ok: true };
+}
+
 export { isProtected, idOf, signature };

@@ -448,15 +448,24 @@ await step('drag & drop dentro lo stesso pannello riordina (trascina Addon X in 
   eq(await names(p), ['Cinemeta', 'Addon B', 'Addon A', 'Addon X'], 'annulla tutte le modifiche');
 });
 
-await step('addon protetti non rimovibili', async () => {
+await step("addon protetti: rimovibili solo dopo l'avviso, poi ripristinabili dal vault", async () => {
   const p = panel(S);
-  await row(p, 'Cinemeta').locator('button[aria-label="Altre azioni"]').click();
-  assert(await page.locator('.menu-item:has-text("Rimuovi")').isDisabled(), 'Rimuovi dovrebbe essere disabilitato');
-  await page.keyboard.press('Escape');
   await row(p, 'Cinemeta').focus();
   await page.keyboard.press('Delete');
-  await toast(/protetti/).waitFor();
-  assert((await names(p)).includes('Cinemeta'));
+  const dlg = page.locator('dialog[open]');
+  await dlg.locator('text=addon di sistema').first().waitFor();
+  await page.keyboard.press('Enter'); // il focus è su "Annulla"
+  assert((await names(p)).includes('Cinemeta'), 'annullando resta');
+  await row(p, 'Cinemeta').locator('button[aria-label="Altre azioni"]').click();
+  await page.click('.menu-item:has-text("Rimuovi")');
+  await dlg.locator('button:has-text("Rimuovi comunque")').click();
+  await row(p, 'Cinemeta').waitFor({ state: 'detached' }); // confermando viene rimosso
+  await p.locator('button[aria-label="Menu pannello"]').click();
+  await page.click('.menu-item:has-text("Ripristina addon di sistema")');
+  assert(await page.locator('.menu-item:has-text("Cinemeta")').isEnabled(), 'Cinemeta ripristinabile');
+  await page.keyboard.press('Escape');
+  await p.locator('button:has-text("Annulla")').first().click();
+  await row(p, 'Cinemeta').waitFor();
 });
 
 await step('rimozione: richiede conferma elencando gli addon, poi scrive la lista ridotta', async () => {

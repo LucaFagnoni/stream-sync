@@ -42,7 +42,7 @@ Addon Manager è un'applicazione web statica, senza backend: il browser comunica
 
 **Manifest e manutenzione**
 - Copia l'URL del manifest, il link `stremio://` o il manifest JSON completo, oppure tutti gli URL di una lista.
-- Apri il manifest o la pagina di configurazione dell'addon.
+- Apri il manifest o la pagina di configurazione dell'addon (se l'addon la offre, anche su Nuvio).
 - **Verifica e aggiorna**: scarica di nuovo i manifest e segnala gli addon non raggiungibili. Su Stremio i manifest cambiati vengono aggiornati nella bozza, con l'indicazione della versione (`2.0.0 → 3.0.0`).
 - Aggiunta da URL (uno o più, anche `stremio://`) con verifica del manifest, oppure trascinando un link da un'altra pagina.
 
@@ -140,7 +140,7 @@ Le API di Stremio (`addonCollectionSet`) e Nuvio (`sync_push_addons`) sostituisc
 
 - **Verifica dei manifest.** Il browser non distingue un server offline da uno che non consente richieste cross-origin. Su Nuvio un addon non verificabile si può aggiungere comunque, perché basta l'URL. Su Stremio serve il manifest completo, quindi non si può.
 - **URL `http://`.** Vengono bloccati dal browser, perché la pagina è servita in HTTPS (fa eccezione `localhost`).
-- **Addon protetti di Stremio** (per esempio Cinemeta): non si possono rimuovere.
+- **Addon protetti di Stremio** (per esempio Cinemeta): si possono rimuovere solo dopo un avviso; dal menu ⋯ del pannello, “Ripristina addon di sistema” li rimette (Cinemeta, Local Files, OpenSubtitles v3, WatchHub).
 - **Accesso a Stremio.** Solo con email e password; gli accessi tramite Facebook o Apple non sono supportati.
 - **Manifest su Nuvio.** Il server non conserva il manifest, quindi «aggiorna» si limita al nome e allo stato dell'addon.
 

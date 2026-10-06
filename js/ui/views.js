@@ -65,7 +65,7 @@ const displayName = shownName;
 
 function badges(item) {
   const b = [];
-  if (isProtected(item)) b.push(h('span', { class: 'badge lock', title: t('Protected addon: cannot be removed') }, icon('lock', 11), t('Protected')));
+  if (isProtected(item)) b.push(h('span', { class: 'badge lock', title: t('Protected system addon: removing it asks for confirmation') }, icon('lock', 11), t('Protected')));
   if (item.isNew) b.push(h('span', { class: 'badge new' }, t('New')));
   if (item.updatedFrom) {
     const from = str(item.updatedFrom.from);
@@ -146,9 +146,18 @@ function onRowKey(e, panel, item) {
 }
 
 // ---------- azioni ----------
-function removeKeys(panel, keys) {
-  const r = panel.remove(keys);
-  if (r.blocked) toast(t('{n} protected addons cannot be removed.', { n: r.blocked }), 'info');
+async function removeKeys(panel, keys) {
+  const set = new Set(keys);
+  const prot = panel.items.filter((i) => set.has(i.key) && isProtected(i));
+  if (prot.length && !(await confirmDialog({
+    title: t('Remove protected addons?'),
+    body: [
+      h('p', null, t('“{names}” is a system addon: without it Stremio may lose catalogs, metadata or local playback.', { names: prot.map(shownName).join('”, “') })),
+      h('p', { class: 'field-hint' }, t('You can put it back later: panel ⋯ menu → “Restore system addon”.')),
+    ],
+    confirm: t('Remove anyway'), danger: true,
+  }))) return;
+  panel.remove(keys, { force: true });
   app.notifyPanel(panel);
 }
 
@@ -182,12 +191,13 @@ async function itemMenu(anchor, panel, item) {
   const keys = panel.selected.has(item.key) ? [...panel.selected] : [item.key];
   const many = keys.length > 1;
   const m = item.manifest;
-  menu(anchor, [
+  const configurable = m?.behaviorHints?.configurable === true || m?.behaviorHints?.configurationRequired === true;
+  const shown = menu(anchor, [
     { label: t('Copy manifest URL'), icon: 'copy', onClick: () => copyUrl(item.url) },
     { label: t('Copy as stremio:// link'), icon: 'link', onClick: () => copyUrl(item.url.replace(/^https?:\/\//i, 'stremio://'), t('stremio:// link copied')) },
     { label: t('Copy manifest JSON'), icon: 'copy', onClick: () => copyManifestJson(item) },
     { label: t('Open manifest'), icon: 'external', disabled: !httpUrl(item.url), onClick: () => window.open(item.url, '_blank', 'noopener,noreferrer') },
-    m?.behaviorHints?.configurable === true && baseUrl(item.url)
+    configurable && baseUrl(item.url)
       ? { label: t('Configure addon'), icon: 'external', onClick: () => window.open(`${baseUrl(item.url)}/configure`, '_blank', 'noopener,noreferrer') }
       : null,
     'sep',
@@ -196,8 +206,30 @@ async function itemMenu(anchor, panel, item) {
     'sep',
     { label: panel.kind === 'stremio' ? t('Check and update manifest') : t('Check reachability'), icon: 'refresh', onClick: () => runCheck(panel, keys) },
     panel.kind === 'nuvio' ? { label: item.enabled ? t('Disable') : t('Enable'), icon: 'power', onClick: () => { panel.setEnabled(keys, !item.enabled); app.notifyPanel(panel); } } : null,
-    { label: many ? t('Remove {n}', { n: keys.length }) : t('Remove'), icon: 'trash', danger: true, disabled: isProtected(item) && !many, hint: isProtected(item) ? t('Protected addon') : undefined, onClick: () => removeKeys(panel, keys) },
+    { label: many ? t('Remove {n}', { n: keys.length }) : t('Remove'), icon: 'trash', danger: true, hint: isProtected(item) ? t('Protected addon') : undefined, onClick: () => removeKeys(panel, keys) },
   ].filter(Boolean));
+  // Nuvio non conserva i manifest: si scaricano al volo e, se l'addon è configurabile, il menu si riapre con la voce.
+  if (!m && httpUrl(item.url)) {
+    const r = await fetchManifest(item.url, { timeout: 4000 });
+    if (!r.ok || !panel.find(item.key)) return;
+    panel.annotate(item.key, { manifest: r.manifest });
+    const bh = r.manifest.behaviorHints;
+    if (shown.isConnected && (bh?.configurable === true || bh?.configurationRequired === true)) itemMenu(anchor, panel, panel.find(item.key));
+  }
+}
+
+function vaultMenu(anchor, panel) {
+  const list = app.VAULT.filter((v) => !v.only || v.only === panel.kind);
+  menu(anchor, [
+    { heading: t('Restore system addon') },
+    ...list.map((v) => ({
+      label: v.name, icon: v.flags.protected ? 'lock' : 'plus', disabled: panel.has(v.url), hint: panel.has(v.url) ? t('Already present') : undefined,
+      onClick: async () => {
+        const r = await app.restoreFromVault(panel, v);
+        toast(r.ok ? t('“{name}” restored. Save to apply.', { name: v.name }) : t('“{name}” not restored: {error}', { name: v.name, error: r.error }), r.ok ? 'ok' : 'error');
+      },
+    })),
+  ]);
 }
 
 async function copyManifestJson(item) {
@@ -460,6 +492,7 @@ function panelMenu(anchor, panel) {
     { label: t('Add from URL…'), icon: 'plus', onClick: () => openInstall(panel) },
     { label: t('Import from file…'), icon: 'upload', onClick: () => openImport(panel) },
     { label: t('Sync from another panel…'), icon: 'layers', onClick: () => openMirror(panel) },
+    { label: t('Restore system addon…'), icon: 'lock', disabled: panel.readOnly, onClick: () => vaultMenu(anchor, panel) },
     'sep',
     { label: t('Sort A → Z'), icon: 'sort', onClick: () => { panel.sortByName(); app.notifyPanel(panel); } },
     { label: all ? t('Deselect all') : t('Select all'), icon: 'check', onClick: () => { panel.selected = all ? new Set() : new Set(panel.items.filter(matches).map((i) => i.key)); app.notifyPanel(panel); } },

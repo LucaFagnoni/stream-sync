@@ -144,12 +144,12 @@ export class Panel {
     return this.commit([...this.items.slice(0, at), ...newItems, ...this.items.slice(at)]);
   }
 
-  /** @returns {{removed: number, blocked: number}} gli addon protetti non vengono rimossi */
-  remove(keys) {
+  /** @returns {{removed: number, blocked: number}} gli addon protetti si rimuovono solo con `force` */
+  remove(keys, { force = false } = {}) {
     const set = new Set(keys);
     const targets = this.items.filter((i) => set.has(i.key));
-    const blocked = targets.filter(isProtected).length;
-    const kill = new Set(targets.filter((i) => !isProtected(i)).map((i) => i.key));
+    const blocked = force ? 0 : targets.filter(isProtected).length;
+    const kill = new Set(targets.filter((i) => force || !isProtected(i)).map((i) => i.key));
     const ok = kill.size > 0 && this.commit(this.items.filter((i) => !kill.has(i.key)));
     return { removed: ok ? kill.size : 0, blocked };
   }

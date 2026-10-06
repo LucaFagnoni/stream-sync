@@ -118,6 +118,8 @@ test('remove non tocca gli addon protetti di Stremio', () => {
   assert.deepEqual(r, { removed: 1, blocked: 1 });
   assert.equal(p.items.length, 1);
   assert.equal(p.items[0].flags.protected, true);
+  assert.deepEqual(p.remove(p.items.map((i) => i.key), { force: true }), { removed: 1, blocked: 0 });
+  assert.equal(p.items.length, 0);
 });
 
 test('diff conta aggiunti/rimossi/modificati', () => {

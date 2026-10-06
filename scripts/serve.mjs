@@ -14,10 +14,9 @@ export function serve(p = port) {
   const server = createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://x');
-      let path = normalize(decodeURIComponent(url.pathname));
-      if (path.endsWith('/')) path += 'index.html';
+      const path = normalize(decodeURIComponent(url.pathname.endsWith('/') ? url.pathname + 'index.html' : url.pathname));
       const file = join(root, path);
-      if (!file.startsWith(root + sep) || /\/(tests|scripts|node_modules|\.git)\//.test(path)) { res.writeHead(404).end('Not found'); return; }
+      if (!file.startsWith(root + sep) || /[\\/](tests|scripts|node_modules|\.git)[\\/]/.test(path)) { res.writeHead(404).end('Not found'); return; }
       const data = await readFile(file);
       res.writeHead(200, { 'Content-Type': types[extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' }).end(data);
     } catch {
